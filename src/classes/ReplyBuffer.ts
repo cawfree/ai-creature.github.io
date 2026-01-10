@@ -4,10 +4,10 @@ import {getRandomInt} from '../utils';
 export class ReplyBuffer {
 
   _limit: number;
-  _onDiscard: (transition: Transition) => void;
+  _onDiscard: (transition: Omit<Transition, 'nextState'>) => void;
   size: number;
   _pool: number[];
-  _buffer: Transition[];
+  _buffer: Omit<Transition, 'nextState'>[];
 
   /**
    * Constructor.
@@ -15,7 +15,7 @@ export class ReplyBuffer {
    * @param {*} limit maximum number of transitions
    * @param {*} onDiscard callback triggered on discard a transition
    */
-  constructor(limit = 500, onDiscard = () => {}) {
+  constructor(limit = 500, onDiscard = (transition: Omit<Transition, 'nextState'>) => {}) {
       this._limit = limit
       this._onDiscard = onDiscard
 
@@ -31,7 +31,7 @@ export class ReplyBuffer {
    * 
    * @param {{id: number, priority: number, state: array, action, reward: number}} transition transition
    */
-  add(transition: Transition) {
+  add(transition: Omit<Transition, 'nextState'>) {
       let { id, priority = 1 } = transition
       if (id === undefined || id < 0 || priority < 1) 
           throw new Error('Invalid arguments')

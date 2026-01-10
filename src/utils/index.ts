@@ -9,6 +9,15 @@ export const getRandomInt = (min: number, max: number)  => {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 };
 
+export const assertNumericArray = (e: unknown): number[] => {
+  assert(Array.isArray(e));
+
+  return e.map(i => {
+    assert(typeof i === 'number');
+    return i;
+  });
+}
+
 export const assertShape = (tensor: tf.Tensor, shape: readonly number[]) =>
   assert(isEqual(tensor.shape, shape));
 

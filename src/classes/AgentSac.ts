@@ -39,7 +39,7 @@ export class AgentSac {
   _forced: boolean;
   _sighted: boolean;
   _rewardScale: number;
-  _frameStackShape: readonly number[];
+  _frameStackShape: [number, number, number];
   _targetEntropy: number;
 
   /* initialization */
@@ -95,7 +95,7 @@ export class AgentSac {
     this._forced = forced;
     this._sighted = sighted;
     this._rewardScale = rewardScale;
-    this._frameStackShape = [...this._frameShape.slice(0, 2), this._frameShape[2] * this._nFrames];
+    this._frameStackShape = [...this._frameShape.slice(0, 2), this._frameShape[2] * this._nFrames] as [number, number, number];
     // https://github.com/rail-berkeley/softlearning/blob/13cf187cc93d90f7c217ea2845067491c3c65464/softlearning/algorithms/sac.py#L37
     this._targetEntropy = -nActions;
   }
@@ -133,7 +133,7 @@ export class AgentSac {
     this._inited = true;
   }
 
-  train({ state, action, reward, nextState }: Transition): void {
+  train({ state, action, reward, nextState }: Omit<Transition, 'id' | 'priority'>): void {
     if (!this._trainable) throw new Error('Actor is not trainable')
     
     return tf.tidy(() => {

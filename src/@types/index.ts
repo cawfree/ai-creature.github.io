@@ -2,7 +2,8 @@ import * as tf from '@tensorflow/tfjs';
 
 export type Transition = {
   readonly id: number;
-  readonly priority: number;
+  // TODO: maybe declare separately?
+  readonly priority?: number;
   readonly state: tf.Tensor[];
   readonly nextState: tf.Tensor[];
   readonly action: tf.Tensor;

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import assert from 'minimalistic-assert';
 import * as tf from '@tensorflow/tfjs';
 
 import './index.css';
@@ -677,34 +678,21 @@ const createScene = async () => {
     return scene
 };
 
-window.initFunction = async function() {
-    await Ammo();
-    
-    const asyncEngineCreation = async function() {
-        try {
-            return createDefaultEngine();
-        } catch(e) {
-            console.log("the available createEngine function failed. Creating the default engine instead");
-            return createDefaultEngine();
-        }
-    }
+window.initFunction = async () => {
+  await Ammo();
+  
+  window.engine = createDefaultEngine();
+  assert(engine);
 
-    window.engine = await asyncEngineCreation();
-
-    if (!engine) throw 'engine should not be null.';
-
-    window.scene = await createScene();
+  window.scene = await createScene();
 };
 
-initFunction().then(() => {
-    sceneToRender = scene;
-    engine.runRenderLoop(function () {
-        if (sceneToRender && sceneToRender.activeCamera) {
-            sceneToRender.render();
-        }
-    });
+void initFunction().then(() => {
+  sceneToRender = scene;
+  engine.runRenderLoop(() => {
+    if (!sceneToRender?.activeCamera) return;
+    return sceneToRender.render();
+  });
 });
 
-window.addEventListener("resize", function () {
-    engine.resize();
-});
+window.addEventListener('resize', () => void engine.resize());
