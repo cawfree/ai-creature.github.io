@@ -1,136 +1,150 @@
 // @ts-nocheck
 import * as tf from '@tensorflow/tfjs';
 
-/**
- * Validates the shape of a given tensor. 
- * 
- * @param {Tensor} tensor - tensor whose shape must be validated
- * @param {array} shape - shape to compare with
- * @param {string} [msg = ''] - message for the error
- */
-const assertShape = (tensor, shape, msg = '') => {
-    console.assert(
-        JSON.stringify(tensor.shape) === JSON.stringify(shape),
-        msg + ' shape ' + tensor.shape + ' is not ' + shape)
-}
+import {assertShape} from '../utils';
+import { AgentSacProps } from '../@types';
 
-const VERSION = 84 // 1fr diff, 30min
+const VERSION = 84;
 
-const LOG_STD_MIN = -20
-const LOG_STD_MAX = 2
-const EPSILON = 1e-8
+const LOG_STD_MIN = -20;
+const LOG_STD_MAX = 2;
+const EPSILON = 1e-8;
 const NAME = {
-    ACTOR: 'actor',
-    Q1: 'q1',
-    Q2: 'q2',        
-    Q1_TARGET: 'q1-target',
-    Q2_TARGET: 'q2-target',
-    ALPHA: 'alpha'
-}
+  ACTOR: 'actor',
+  Q1: 'q1',
+  Q2: 'q2',        
+  Q1_TARGET: 'q1-target',
+  Q2_TARGET: 'q2-target',
+  ALPHA: 'alpha'
+};
 
 export class AgentSac {
-        constructor({
-            batchSize = 1, 
-            frameShape = [25, 25, 3], 
-            nFrames = 1, // Number of stacked frames per state
-            nActions = 3, // 3 - impuls, 3 - RGB color
-            nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
-            gamma = 0.99, // Discount factor (γ)
-            tau = 5e-3, // Target smoothing coefficient (τ)
-            trainable = true, // Whether the actor is trainable
-            verbose = false,
-            forced = false, // force to create fresh models (not from checkpoint)
-            prefix = '', // for tests,
-            sighted = true,
-            rewardScale = 10
-        } = {}) {
-            this._batchSize = batchSize
-            this._frameShape = frameShape 
-            this._nFrames = nFrames
-            this._nActions = nActions
-            this._nTelemetry = nTelemetry
-            this._gamma = gamma
-            this._tau = tau
-            this._trainable = trainable
-            this._verbose = verbose
-            this._inited = false
-            this._prefix = (prefix === '' ? '' : prefix + '-')
-            this._forced = forced
-            this._sighted = sighted
-            this._rewardScale = rewardScale
-            
-            this._frameStackShape = [...this._frameShape.slice(0, 2), this._frameShape[2] * this._nFrames]
 
-            // https://github.com/rail-berkeley/softlearning/blob/13cf187cc93d90f7c217ea2845067491c3c65464/softlearning/algorithms/sac.py#L37
-            this._targetEntropy = -nActions
-        }
+  /* constructor */
+  _batchSize: number;
+  _frameShape: readonly number[];
+  _nFrames: number;
+  _nActions: number;
+  _nTelemetry: number;
+  _gamma: number;
+  _tau: number;
+  _trainable: boolean;
+  _verbose: boolean;
+  _inited: boolean;
+  _prefix: string;
+  _forced: boolean;
+  _sighted: boolean;
+  _rewardScale: number;
+  _frameStackShape: readonly number[];
+  _targetEntropy: number;
 
-        /**
-         * Initialization.
-         */
-        async init() {
-            if (this._inited) throw Error('щ（ﾟДﾟщ）')
+  /* initialization */
+  _frameInputL?: tf.SymbolicTensor;
+  _frameInputR?: tf.SymbolicTensor;
+  _telemetryInput?: tf.SymbolicTensor;
 
-            this._frameInputL = tf.input({batchShape : [null, ...this._frameStackShape]})
-            this._frameInputR = tf.input({batchShape : [null, ...this._frameStackShape]})
+  /* actor */
+  actor?: tf.LayersModel;
+  actorOptimizer?: tf.Optimizer;
 
-            this._telemetryInput = tf.input({batchShape : [null, this._nTelemetry]})
-            
-            this.actor = await this._getActor(this._prefix + NAME.ACTOR, this.trainable)
-            
-            if (!this._trainable)
-                return
-            
-            this.actorOptimizer = tf.train.adam()
+  /* critic */
+  q1?: tf.LayersModel;
+  q1Targ?: tf.LayersModel;
+  q1Optimizer?: tf.Optimizer;
 
-            this._actionInput = tf.input({batchShape : [null, this._nActions]})
+  q2?: tf.LayersModel;
+  q2Targ?: tf.LayersModel;
+  q2Optimizer?: tf.Optimizer;
 
-            this.q1 = await this._getCritic(this._prefix + NAME.Q1)
-            this.q1Optimizer = tf.train.adam()
+  // TODO: idk.
+  _actionInput?: tf.SymbolicTensor;
+  _logAlpha?: tf.Variable<tf.Rank.R0>;
+  alphaOptimizer?: tf.Optimizer;
 
-            this.q2 = await this._getCritic(this._prefix + NAME.Q2)
-            this.q2Optimizer = tf.train.adam()
+  constructor({
+    batchSize = 1, 
+    frameShape = [25, 25, 3], 
+    nFrames = 1, // Number of stacked frames per state
+    nActions = 3, // 3 - impuls, 3 - RGB color
+    nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
+    gamma = 0.99, // Discount factor (γ)
+    tau = 5e-3, // Target smoothing coefficient (τ)
+    trainable = true, // Whether the actor is trainable
+    verbose = false,
+    forced = false, // force to create fresh models (not from checkpoint)
+    prefix = '', // for tests,
+    sighted = true,
+    rewardScale = 10
+  }: Partial<AgentSacProps> = Object.create(null)) {
+    this._batchSize = batchSize;
+    this._frameShape = frameShape;
+    this._nFrames = nFrames;
+    this._nActions = nActions;
+    this._nTelemetry = nTelemetry;
+    this._gamma = gamma;
+    this._tau = tau;
+    this._trainable = trainable;
+    this._verbose = verbose;
+    this._inited = false;
+    this._prefix = (prefix === '' ? '' : prefix + '-');
+    this._forced = forced;
+    this._sighted = sighted;
+    this._rewardScale = rewardScale;
+    this._frameStackShape = [...this._frameShape.slice(0, 2), this._frameShape[2] * this._nFrames];
+    // https://github.com/rail-berkeley/softlearning/blob/13cf187cc93d90f7c217ea2845067491c3c65464/softlearning/algorithms/sac.py#L37
+    this._targetEntropy = -nActions;
+  }
 
-            this.q1Targ = await this._getCritic(this._prefix + NAME.Q1_TARGET, true) // true for batch norm
-            this.q2Targ = await this._getCritic(this._prefix + NAME.Q2_TARGET, true)
+  async init() {
+    if (this._inited) throw Error('щ（ﾟДﾟщ）');
 
-            this._logAlpha = await this._getLogAlpha(this._prefix + NAME.ALPHA)
-            this.alphaOptimizer = tf.train.adam()
+    this._frameInputL = tf.input({batchShape : [null, ...this._frameStackShape]});
+    this._frameInputR = tf.input({batchShape : [null, ...this._frameStackShape]});
+    this._telemetryInput = tf.input({batchShape : [null, this._nTelemetry]});
+      
+    this.actor = await this._getActor(this._prefix + NAME.ACTOR, this._trainable);
+      
+    if (!this._trainable) return;
+      
+    this.actorOptimizer = tf.train.adam();
 
-            this.updateTargets(1)
+    this._actionInput = tf.input({batchShape: [null, this._nActions]});
 
-            // console.log('weights actorr', this.actor.getWeights().map(w => w.arraySync()))
-            // console.log('weights q1q1q1', this.q1.getWeights().map(w => w.arraySync()))
-            // console.log('weights q2Targ', this.q2Targ.getWeights().map(w => w.arraySync()))
+    this.q1 = await this._getCritic(this._prefix + NAME.Q1);
+    this.q1Optimizer = tf.train.adam();
 
-            this._inited = true
-        }
+    this.q2 = await this._getCritic(this._prefix + NAME.Q2);
+    this.q2Optimizer = tf.train.adam();
 
-        /**
-         * Trains networks on a batch from the replay buffer.
-         * 
-         * @param {{ state, action, reward, nextState }} - trnsitions in batch
-         * @returns {void} nothing
-         */
-        train({ state, action, reward, nextState }) {
-            if (!this._trainable)
-                throw new Error('Actor is not trainable')
+    // true for batch norm
+    this.q1Targ = await this._getCritic(this._prefix + NAME.Q1_TARGET, true /* batch_normalization */);
+    this.q2Targ = await this._getCritic(this._prefix + NAME.Q2_TARGET, true /* batch_normalization */);
 
-            return tf.tidy(() => {
-                assertShape(state[0], [this._batchSize, this._nTelemetry], 'telemetry')
-                assertShape(state[1], [this._batchSize, ...this._frameStackShape], 'frames')
-                assertShape(action, [this._batchSize, this._nActions], 'action')
-                assertShape(reward, [this._batchSize, 1], 'reward')
-                assertShape(nextState[0], [this._batchSize, this._nTelemetry], 'nextState telemetry')
-                assertShape(nextState[1], [this._batchSize, ...this._frameStackShape], 'nextState frames')
+    this._logAlpha = await this._getLogAlpha(this._prefix + NAME.ALPHA);
+    this.alphaOptimizer = tf.train.adam();
 
-                this._trainCritics({ state, action, reward, nextState })
-                this._trainActor(state)
-                this._trainAlpha(state)
-                
-                this.updateTargets()
-            })
-        }
+    this.updateTargets(1);
+
+    this._inited = true;
+  }
+
+  train({ state, action, reward, nextState }): void {
+    if (!this._trainable) throw new Error('Actor is not trainable')
+    
+    return tf.tidy(() => {
+      assertShape(state[0], [this._batchSize, this._nTelemetry]);
+      assertShape(state[1], [this._batchSize, ...this._frameStackShape]);
+      assertShape(action, [this._batchSize, this._nActions]);
+      assertShape(reward, [this._batchSize, 1]);
+      assertShape(nextState[0], [this._batchSize, this._nTelemetry]);
+      assertShape(nextState[1], [this._batchSize, ...this._frameStackShape]);
+    
+      void this._trainCritics({state, action, reward, nextState});
+      void this._trainActor(state);
+      void this._trainAlpha(state);
+      void this.updateTargets();
+    });
+  }
 
         /**
          * Train Q-networks.
@@ -141,10 +155,10 @@ export class AgentSac {
             const getQLossFunction = (() => {
                 const [nextFreshAction, logPi] = this.sampleAction(nextState, true)
 
-                const q1TargValue = this.q1Targ.predict(
+                const q1TargValue = this.q1Targ!.predict(
                     this._sighted ? [...nextState, nextFreshAction] : [nextState[0], nextFreshAction], 
                     {batchSize: this._batchSize})
-                const q2TargValue = this.q2Targ.predict(
+                const q2TargValue = this.q2Targ!.predict(
                     this._sighted ? [...nextState, nextFreshAction] : [nextState[0], nextFreshAction], 
                     {batchSize: this._batchSize})
                 
@@ -158,10 +172,10 @@ export class AgentSac {
                     )
                 )
                             
-                assertShape(nextFreshAction, [this._batchSize, this._nActions], 'nextFreshAction')
-                assertShape(logPi, [this._batchSize, 1], 'logPi')
-                assertShape(qTargValue, [this._batchSize, 1], 'qTargValue')
-                assertShape(target, [this._batchSize, 1], 'target')
+                assertShape(nextFreshAction, [this._batchSize, this._nActions]);
+                assertShape(logPi, [this._batchSize, 1]);
+                assertShape(qTargValue, [this._batchSize, 1]);
+                assertShape(target, [this._batchSize, 1]);
     
                 return (q) => () => {
                     const qValue = q.predict(
@@ -171,7 +185,7 @@ export class AgentSac {
                     // const loss = tf.scalar(0.5).mul(tf.losses.meanSquaredError(qValue, target))
                     const loss = tf.scalar(0.5).mul(tf.mean(qValue.sub(target).square()))
                     
-                    assertShape(qValue, [this._batchSize, 1], 'qValue')
+                    assertShape(qValue, [this._batchSize, 1]);
 
                     return loss
                 }

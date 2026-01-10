@@ -6,7 +6,8 @@ import * as tf from '@tensorflow/tfjs';
 
 import './index.css';
 import reportWebVitals from './reportWebVitals';
-import {AgentSac} from './agent'
+
+import {AgentSac} from './classes'
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
