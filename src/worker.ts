@@ -1,7 +1,8 @@
 // @ts-nocheck
 import * as tf from '@tensorflow/tfjs';
+
 import {AgentSac} from './agent';
-import {ReplyBuffer} from './reply_buffer';
+import {ReplyBuffer} from './classes';
 
 ;(async () => {
     const DISABLED = false
