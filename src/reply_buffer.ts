@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Returns a random integer between min (inclusive) and max (inclusive).
  * The value is no lower than min (or the next integer greater than min
@@ -6,7 +8,7 @@
  * Using Math.round() will give you a non-uniform distribution!
  * https://stackoverflow.com/questions/1527803/generating-random-whole-numbers-in-javascript-in-a-specific-range
  */
- const getRandomInt = (min, max)  => {
+ export const getRandomInt = (min, max)  => {
     min = Math.ceil(min)
     max = Math.floor(max)
     return Math.floor(Math.random() * (max - min + 1)) + min
@@ -15,7 +17,7 @@
 /**
  * Reply Buffer.
  */
-class ReplyBuffer {
+export class ReplyBuffer {
     /**
      * Constructor.
      * 
@@ -101,47 +103,48 @@ class ReplyBuffer {
     }
 }
 
-/** TESTS */
-(() => {
-    return
-
-    const rb = new ReplyBuffer(5)
-    rb.add({id: 0, state: 0})
-    rb.add({id: 1, state: 1})
-    rb.add({id: 2, state: 2, priority: 3})
-    
-    console.assert(rb.size === 3)
-    console.assert(rb._pool.length === 5)
-    console.assert(rb._buffer[0].id === 0)
-    
-    rb.add({id: 2, state: 2})
-    rb.add({id: 4, state: 4, priority: 2})
-    
-    console.assert(rb.size === 4)
-    console.assert(rb._pool.length === 5)
-    console.assert(JSON.stringify(rb._pool) === '[0,1,2,4,4]')
-    
-    rb.add({id: 5, state: 0, priority: 2}) // 5%5 = 0 => state = 0
-    
-    console.assert(rb.size === 4)
-    console.assert(rb._pool.length === 6)
-    console.assert(rb._buffer.length === 5)
-    console.assert(rb._buffer[0].id === 5)
-    console.assert(JSON.stringify(rb._pool) === '[1,2,4,4,0,0]')
-
-    console.assert(rb.sample(999).length === 0, 'Too many samples')
-    
-    let samples1 = rb.sample(2)
-    console.assert(samples1.length === 2, 'Only two samples possible')
-    console.assert(samples1[0].nextState === (samples1[0].state + 1) % 5, 'Next state should be valid', samples1)
-
-    rb.add({id: 506, state: 506, priority: 3})
-
-    let samples2 = rb.sample(1)
-    console.assert(samples2.length === 1, 'Only one suitable sample with valid next state')
-    console.assert(samples2[0].state === 4, 'Sample with id:4')
-    console.assert(rb._buffer[1].id === 506, '506 % 5 = 1')
-
-    console.assert(rb.sample(2).length === 0, 
-        'Can not sample 2 transitions since next state is available only for one state')
-})()
+///** TESTS */
+//(() => {
+//    return
+//
+//    const rb = new ReplyBuffer(5)
+//    rb.add({id: 0, state: 0})
+//    rb.add({id: 1, state: 1})
+//    rb.add({id: 2, state: 2, priority: 3})
+//    
+//    console.assert(rb.size === 3)
+//    console.assert(rb._pool.length === 5)
+//    console.assert(rb._buffer[0].id === 0)
+//    
+//    rb.add({id: 2, state: 2})
+//    rb.add({id: 4, state: 4, priority: 2})
+//    
+//    console.assert(rb.size === 4)
+//    console.assert(rb._pool.length === 5)
+//    console.assert(JSON.stringify(rb._pool) === '[0,1,2,4,4]')
+//    
+//    rb.add({id: 5, state: 0, priority: 2}) // 5%5 = 0 => state = 0
+//    
+//    console.assert(rb.size === 4)
+//    console.assert(rb._pool.length === 6)
+//    console.assert(rb._buffer.length === 5)
+//    console.assert(rb._buffer[0].id === 5)
+//    console.assert(JSON.stringify(rb._pool) === '[1,2,4,4,0,0]')
+//
+//    console.assert(rb.sample(999).length === 0, 'Too many samples')
+//    
+//    let samples1 = rb.sample(2)
+//    console.assert(samples1.length === 2, 'Only two samples possible')
+//    console.assert(samples1[0].nextState === (samples1[0].state + 1) % 5, 'Next state should be valid', samples1)
+//
+//    rb.add({id: 506, state: 506, priority: 3})
+//
+//    let samples2 = rb.sample(1)
+//    console.assert(samples2.length === 1, 'Only one suitable sample with valid next state')
+//    console.assert(samples2[0].state === 4, 'Sample with id:4')
+//    console.assert(rb._buffer[1].id === 506, '506 % 5 = 1')
+//
+//    console.assert(rb.sample(2).length === 0, 
+//        'Can not sample 2 transitions since next state is available only for one state')
+//})()
+//

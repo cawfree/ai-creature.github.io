@@ -1,6 +1,7 @@
-importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.12.0/dist/tf.min.js')
-importScripts('agent_sac.js')
-importScripts('reply_buffer.js')
+// @ts-nocheck
+import * as tf from '@tensorflow/tfjs';
+import {AgentSac} from './agent';
+import {ReplyBuffer} from './reply_buffer';
 
 ;(async () => {
     const DISABLED = false
@@ -9,6 +10,8 @@ importScripts('reply_buffer.js')
     await agent.init()
     await agent.checkpoint() // overwrite
     agent.actor.summary()
+
+    // eslint-disable-next-line no-restricted-globals
     self.postMessage({weights: await Promise.all(agent.actor.getWeights().map(w => w.array()))}) // syncronize
 
     const rb = new ReplyBuffer(50000, ({ state: [telemetry, frameL, frameR], action, reward }) => {
@@ -70,6 +73,7 @@ importScripts('reply_buffer.js')
         })
 
         console.time('train postMessage')
+        // eslint-disable-next-line no-restricted-globals
         self.postMessage({
             weights: await Promise.all(agent.actor.getWeights().map(w => w.array()))
         })
@@ -99,7 +103,9 @@ importScripts('reply_buffer.js')
      * @returns 
      */
     const decodeTransition = transition => {
-        let { id, state: [telemetry, frameL, frameR], action, reward, priority } = transition
+        let { id, state, action, reward, priority } = transition
+
+        const [telemetry, frameL, frameR] = state;
     
         return tf.tidy(() => {
             state = [
@@ -115,6 +121,8 @@ importScripts('reply_buffer.js')
     }
     
     let i = 0
+
+    // eslint-disable-next-line no-restricted-globals
     self.addEventListener('message', async e => {
         i++
 
@@ -125,20 +133,6 @@ importScripts('reply_buffer.js')
             case 'newTransition':
                 const transition = decodeTransition(e.data.transition)
                 rb.add(transition)
-
-                tf.tidy(()=> {
-                    return
-                    const {
-                        state: [telemetry, frameL, frameR], 
-                        action,
-                    } = transition;
-                    const state = [tf.stack([telemetry]), tf.stack([frameL]), tf.stack([frameR])]
-                    const q1TargValue = agent.q1Targ.predict([...state, tf.stack([action])], {batchSize: 1})
-                    const q2TargValue = agent.q2Targ.predict([...state, tf.stack([action])], {batchSize: 1})                    
-                    console.log('value', Math.min(q1TargValue.arraySync()[0][0], q2TargValue.arraySync()[0][0]).toFixed(5))
-                })
-
-
                 break
             default:
                 console.warn('Unknown action')

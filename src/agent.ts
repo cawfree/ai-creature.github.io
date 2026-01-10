@@ -1,117 +1,34 @@
+// @ts-nocheck
+import * as tf from '@tensorflow/tfjs';
+
 /**
- * Soft Actor Critic Agent https://arxiv.org/abs/1812.05905
- * without value network.
+ * Validates the shape of a given tensor. 
+ * 
+ * @param {Tensor} tensor - tensor whose shape must be validated
+ * @param {array} shape - shape to compare with
+ * @param {string} [msg = ''] - message for the error
  */
-const AgentSac = (() => {
-    /**
-     * Validates the shape of a given tensor. 
-     * 
-     * @param {Tensor} tensor - tensor whose shape must be validated
-     * @param {array} shape - shape to compare with
-     * @param {string} [msg = ''] - message for the error
-     */
-    const assertShape = (tensor, shape, msg = '') => {
-        console.assert(
-            JSON.stringify(tensor.shape) === JSON.stringify(shape),
-            msg + ' shape ' + tensor.shape + ' is not ' + shape)
-    }
+const assertShape = (tensor, shape, msg = '') => {
+    console.assert(
+        JSON.stringify(tensor.shape) === JSON.stringify(shape),
+        msg + ' shape ' + tensor.shape + ' is not ' + shape)
+}
 
-    // const VERSION = 1 // +100 for bump tower
-    // const VERSION = 2 // balls
-    // const VERSION = 3 // tests
-    // const VERSION = 4 // tests
-    // const VERSION = 5 // exp #1
-    // const VERSION = 6 // exp #2
-    // const VERSION = 7 // exp #3
-    // const VERSION = 8 // exp #4
-    // const VERSION = 9 // exp #
-    // const VERSION = 10 // exp # good, doesn't touch
-    // const VERSION = 11 // exp #
-    // const VERSION = 12 // exp # 25x25
-    // const VERSION = 13 // exp # 25x25 single CNN
-    // const VERSION = 15 // 15.1 stable RB 10^5
-    // const VERSION = 16 // reward from RL2, rb 10^6, gr/red balls, bad
-    // const VERSION = 18 // reward from RL2, CNN from SAC paper, works!
-    // const VERSION = 19 // moving balls, super!
-    // const VERSION = 20 // moving balls, discret impulse, bad
-    // const VERSION = 21 // independant look
-    // const VERSION = 22 // dqn arch, bad
-    // const VERSION = 23 // dqn trunc, works! fast learn
-    // const VERSION = 24 // dqn trunc 3 layers, super and fast
-    // const VERSION = 25 // dqn trunc 3 layers 2x512, poor
-    // const VERSION = 26 // rl2 cnn arc, bad too many weights
-    // const VERSION = 27 // sac cnn 16x6x3->16x4x2->8x3x1->2x256 and 2 clr frames, 2h, kiss, Excellent!
-    // const VERSION = 28 // same but 1 frame, works
-    // const VERSION = 29 // 1fr w/o accel, poor
-    // const VERSION = 30 // 2fr wide img, poor
-    // const VERSION = 31 // 2 small imgs, small cnn out, poor
-    // const VERSION = 32 // 2fr binacular
-    // const VERSION = 33 // 4fr binacular, Good, but poor after reload on wider cage
-    // const VERSION = 34 // 4fr binacular, smaller fov=2, angle 0.7, poor
-    // const VERSION = 35 // 4fr binacular with dist, poor
-    // const VERSION = 36 // 4fr binacular with dist, works but reload not
-    // const VERSION = 37 // BCNN achiasma, good -> reload poor
-    // const VERSION = 38 // BCNN achiasma, smaller cnn
-    // const VERSION = 39 // 1fr BCNN achiasma, smaller cnn, works super fast, 30min
-    // const VERSION = 40 // 2fr BCNN achiasma, 2l smaller cnn, poor
-    // const VERSION = 41 // 2fr BCNN achiasma, 2l smaller cnn, some perfm after 30min
-    // const VERSION = 41 // 1fr BCNN achiasma, 2l smaller cnn, super kiss, reload poor
-    // const VERSION = 42 // 2fr BCNN achiasma, 2l smaller cnn, reload poor
-    // const VERSION = 43 // 1fr BCNN achiasma, 3l, fov 0.8, 1h good, reload not bad
-    // const VERSION = 44 // 2fr BCNN achiasma, 3l, fov 0.8, slow 1h, reload not bad, a bit better than 1fr, degrade
-    // const VERSION = 45 // 1fr BCNN achiasma, 2l, fov 0.8, poor
-    // const VERSION = 46 // 2fr BCNN achiasma, 2l, fov 0.8, fast 30 min but poor on reload
-    // const VERSION = 47 // 1fr BCNN chiasma, 2l, fov 0.7, poor
-    // const VERSION = 48 // 2fr BCNN chiasma, 2l, fov 0.7 poor
-    // const VERSION = 49 // 1fr BCNN chiasma stacked, 3l, poor
-    // const VERSION = 50 // 2fr 2nets monocular, 1h good, reload poor
-    // const VERSION = 51 // 1fr 1nets monocular, stuck
-    // const VERSION = 52 // 2fr 2nets monocular, poor
-    // const VERSION = 53 // 2fr 2nets monocular, 
-    // const VERSION = 54 // 2fr binocular
-    // const VERSION = 55 // 2fr binocular
-    // const VERSION = 56 // 2fr binocular
-    // const VERSION = 57 // 1fr binocular, sphere vimeo super
-    // const VERSION = 58 // 2fr binocular, sphere
-    // const VERSION = 59 // 1fr binocular, sphere
-    // const VERSION = 61 // 2fr binocular, sphere, 2lay BASELINE!!! cage 55, mass 2, ball mass 1
-    // const VERSION = 62
-    //const VERSION = 63 // 1fr 30min! cage 60
-    // const VERSION = 64 // 2fr nores
-    // const VERSION = 66 // 1fr 30min slightly slower
-    // const VERSION = 67 // 2fr 30min as prev
-    // const VERSION = 65 // 1fr l/r diff, 30min +400
-    // const VERSION = 68 // 1fr l/r diff, 30min -100 good
-    // const VERSION = 69 // 1fr l/r diff, 30min -190 good
-    // const VERSION = 70 // 1fr l/r diff, 30min -420
-    // const VERSION = 71 // 1fr l/r diff, 30min -480
-    // const VERSION = 72 // 1fr no diff, 30min 
-    // const VERSION = 73 // 1fr no diff, 30min -400 cage 50
-    // const VERSION = 74 // 1fr diff, 30min 2.6k!
-    // const VERSION = 75 // 1fr diff, 30min -300
-    // const VERSION = 76 // 1fr diff, 20min +300!
-    // const VERSION = 77 // 1fr diff, 20min +3.5k!
-    // const VERSION = 78 // 1fr diff, 30min -90
-    // const VERSION = 79 // 1fr NO diff, 25min +158
-    // const VERSION = 80 // 1fr NO diff, 30min -200
-    // const VERSION = 81 // 1fr NO diff, 20min +1200
-    // const VERSION = 82 // 1fr NO diff, 30min
-    // const VERSION = 83 // 1fr NO diff, priority 30min -400
-    const VERSION = 84 // 1fr diff, 30min
+const VERSION = 84 // 1fr diff, 30min
 
-    const LOG_STD_MIN = -20
-    const LOG_STD_MAX = 2
-    const EPSILON = 1e-8
-    const NAME = {
-        ACTOR: 'actor',
-        Q1: 'q1',
-        Q2: 'q2',        
-        Q1_TARGET: 'q1-target',
-        Q2_TARGET: 'q2-target',
-        ALPHA: 'alpha'
-    }
+const LOG_STD_MIN = -20
+const LOG_STD_MAX = 2
+const EPSILON = 1e-8
+const NAME = {
+    ACTOR: 'actor',
+    Q1: 'q1',
+    Q2: 'q2',        
+    Q1_TARGET: 'q1-target',
+    Q2_TARGET: 'q2-target',
+    ALPHA: 'alpha'
+}
 
-    return class AgentSac {
+export class AgentSac {
         constructor({
             batchSize = 1, 
             frameShape = [25, 25, 3], 
@@ -773,125 +690,3 @@ const AgentSac = (() => {
             return 'indexeddb://' + name + '-' + VERSION
         }
     }
-})()
-
-/* TESTS */
-;(async () => {
-    return 
-
-    // https://www.wolframalpha.com/input/?i2d=true&i=y%5C%2840%29x%5C%2844%29+%CE%BC%5C%2844%29+%CF%83%5C%2841%29+%3D+ln%5C%2840%29Divide%5B1%2CSqrt%5B2*%CF%80*Power%5B%CF%83%2C2%5D%5D%5D*Exp%5B-Divide%5B1%2C2%5D*%5C%2840%29Divide%5BPower%5B%5C%2840%29x-%CE%BC%5C%2841%29%2C2%5D%2CPower%5B%CF%83%2C2%5D%5D%5C%2841%29%5D%5C%2841%29
-    ;(() => {
-        const agent = new AgentSac()
-
-        const 
-            mu = tf.tensor([0], [1, 1]),     // mu = 0
-            logStd = tf.tensor([0], [1, 1]), // logStd = 0
-            std = tf.exp(logStd),            // std = 1
-            normal = tf.tensor([0], [1, 1]), // N = 0
-            pi = mu.add(std.mul(normal))     // x = 0
-    
-        const log = agent._gaussianLikelihood(pi, mu, logStd)
-
-        console.assert(log.arraySync()[0][0].toFixed(5) === '-0.91894', 
-            'test Gaussian Likelihood for μ=0, σ=1, x=0')
-    })()
-
-    ;(() => {
-        const agent = new AgentSac()
-
-        const 
-            mu = tf.tensor([1], [1, 1]),     // mu = 1
-            logStd = tf.tensor([1], [1, 1]), // logStd = 1
-            std = tf.exp(logStd),            // std = e
-            normal = tf.tensor([0], [1, 1]), // N = 0
-            pi = mu.add(std.mul(normal))    // x = 1
-    
-        const log = agent._gaussianLikelihood(pi, mu, logStd)
-
-        console.assert(log.arraySync()[0][0].toFixed(5) === '-1.91894',
-            'test Gaussian Likelihood for μ=1, σ=e, x=0')
-    })()
-
-    ;(() => {
-        const agent = new AgentSac()
-
-        const 
-            mu = tf.tensor([1], [1, 1]),     // mu = -1
-            logStd = tf.tensor([1], [1, 1]), // logStd = 1
-            std = tf.exp(logStd),            // std = e
-            normal = tf.tensor([0.1], [1, 1]), // N = 0
-            pi = mu.add(std.mul(normal))    // x = -1.27182818
-    
-        const logPi = agent._gaussianLikelihood(pi, mu, logStd)
-        const { pi: piSquashed, logPi: logPiSquashed } = agent._applySquashing(pi, mu, logPi)
-
-        const logProbBounded = logPi.sub(
-          tf.log(
-            tf.scalar(1)
-              .sub(tf.tanh(pi).pow(tf.scalar(2)))
-              // .add(EPSILON)
-          )
-        ).sum(1, true)
-        
-        console.assert(logPi.arraySync()[0][0].toFixed(5) === '-1.92394',
-            'test Gaussian Likelihood for μ=-1, σ=e, x=-1.27182818')
-
-        console.assert(logPiSquashed.arraySync()[0][0].toFixed(5) === logProbBounded.arraySync()[0][0].toFixed(5),
-            'test logPiSquashed for μ=-1, σ=e, x=-1.27182818')
-
-        console.assert(piSquashed.arraySync()[0][0].toFixed(5) === tf.tanh(pi).arraySync()[0][0].toFixed(5),
-            'test piSquashed for μ=-1, σ=e, x=-1.27182818')
-    })()
-
-    await (async () => {
-        const state = tf.tensor([
-            0.5, 0.3, -0.9,
-            0, -0.8, 1,
-            -0.3, 0.04, 0.02,
-            0.9
-        ], [1, 10])
-
-        const action = tf.tensor([
-            0.1, -1, -0.4,
-            1, -0.8, -0.8, -0.2,
-            0.04, 0.02, 0.001
-        ], [1, 10])
-        
-        const fresh = new AgentSac({ prefix: 'test', forced: true })
-        await fresh.init()
-        await fresh.checkpoint()
-        
-        const saved = new AgentSac({ prefix: 'test' })
-        await saved.init()
-        
-        let frPred, saPred
-
-        frPred = fresh.actor.predict(state, {batchSize: 1})
-        saPred = saved.actor.predict(state, {batchSize: 1})
-        console.assert(
-            frPred[0].arraySync().length > 0 &&
-            frPred[1].arraySync().length > 0 &&
-            frPred[0].arraySync().join(';') === saPred[0].arraySync().join(';') &&
-            frPred[1].arraySync().join(';') === saPred[1].arraySync().join(';'),
-            'Models loaded from the checkpoint should be the same')
-        
-        frPred = fresh.q1.predict([state, action], {batchSize: 1})
-        saPred = fresh.q1Targ.predict([state, action], {batchSize: 1})
-        console.assert(
-            frPred.arraySync()[0][0] !== undefined &&
-            frPred.arraySync()[0][0] === saPred.arraySync()[0][0],
-            'Q1 and Q1-target should be the same')
-
-        frPred = fresh.q2.predict([state, action], {batchSize: 1})
-        saPred = saved.q2.predict([state, action], {batchSize: 1})
-        console.assert(
-            frPred.arraySync()[0][0] !== undefined &&
-            frPred.arraySync()[0][0] === saPred.arraySync()[0][0],
-            'Q and Q restored should be the same')
-
-        console.assert(
-            fresh._logAlpha.arraySync() !== undefined &&
-            fresh._logAlpha.arraySync() === fresh._logAlpha.arraySync(),
-            'Q and Q restored should be the same')
-    })()
-})()

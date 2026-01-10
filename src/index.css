@@ -1,0 +1,85 @@
+html, body {
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+#renderCanvas {
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+}
+
+#testCanvas0 {
+    position:absolute;
+    width: 128px;
+    height: 128px;
+    right:600px;
+    bottom: 0;
+}
+
+#testCanvas1 {
+    position:absolute;
+    width: 128px;
+    height: 128px;
+    right:450px;
+    bottom: 0;
+}
+
+#testCanvas2 {
+    position:absolute;
+    width: 128px;
+    height: 128px;
+    right: 300px;
+    bottom: 0;
+}
+
+#testCanvas3 {
+    position: absolute;
+    width: 128px;
+    height: 128px;
+    right: 150px;
+    bottom: 0;
+}
+
+#testCanvas4 {
+    position: absolute;
+    width: 128px;
+    height: 128px;
+    right: 0px;
+    bottom: 0;
+}
+
+
+/* #votes {
+    position: absolute;
+    border: 1px solid black;
+    bottom: 200px;
+    right: 0px;
+
+    width: 100px;
+    height: 150px;
+} */
+
+.vote {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    right: 10px;
+}
+
+.vote:hover {
+    cursor: pointer;
+}
+
+#like {
+    bottom: 200px;
+}
+
+#dislike {
+    bottom: 120px;
+    -webkit-transform: scaleX(-1);
+    transform: scaleX(-1);
+}
