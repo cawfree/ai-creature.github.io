@@ -1,8 +1,12 @@
-// @ts-nocheck
+import assert from 'minimalistic-assert';
 import * as tf from '@tensorflow/tfjs';
 
-import {assertShape} from '../utils';
-import { AgentSacProps } from '../@types';
+import {AgentSacProps, Transition} from '../@types';
+import {
+  assertScalar,
+  assertShape,
+  getTrainableOnlyWeights,
+} from '../utils';
 
 const VERSION = 84;
 
@@ -60,6 +64,7 @@ export class AgentSac {
   _actionInput?: tf.SymbolicTensor;
   _logAlpha?: tf.Variable<tf.Rank.R0>;
   alphaOptimizer?: tf.Optimizer;
+  _logAlphaPlaceholder?: tf.LayersModel;
 
   constructor({
     batchSize = 1, 
@@ -128,7 +133,7 @@ export class AgentSac {
     this._inited = true;
   }
 
-  train({ state, action, reward, nextState }): void {
+  train({ state, action, reward, nextState }: Transition): void {
     if (!this._trainable) throw new Error('Actor is not trainable')
     
     return tf.tidy(() => {
@@ -151,9 +156,12 @@ export class AgentSac {
          * 
          * @param {{ state, action, reward, nextState }} transition - transition
          */
-        _trainCritics({ state, action, reward, nextState }) {
+        _trainCritics({ state, action, reward, nextState }: Omit<Transition, 'id' | 'priority'>) {
             const getQLossFunction = (() => {
-                const [nextFreshAction, logPi] = this.sampleAction(nextState, true)
+                const sampledAction = this.sampleAction(nextState, true)
+                assert(Array.isArray(sampledAction));
+
+                const [nextFreshAction, logPi] = sampledAction;
 
                 const q1TargValue = this.q1Targ!.predict(
                     this._sighted ? [...nextState, nextFreshAction] : [nextState[0], nextFreshAction], 
@@ -162,6 +170,7 @@ export class AgentSac {
                     this._sighted ? [...nextState, nextFreshAction] : [nextState[0], nextFreshAction], 
                     {batchSize: this._batchSize})
                 
+                assert(!Array.isArray(q1TargValue) && !Array.isArray(q2TargValue));
                 const qTargValue = tf.minimum(q1TargValue, q2TargValue)
     
                 // y = r + γ*(1 - d)*(min(Q1Targ(s', a'), Q2Targ(s', a')) - α*log(π(s'))
@@ -177,31 +186,31 @@ export class AgentSac {
                 assertShape(qTargValue, [this._batchSize, 1]);
                 assertShape(target, [this._batchSize, 1]);
     
-                return (q) => () => {
+                return (q: tf.LayersModel) => (): tf.Scalar => {
                     const qValue = q.predict(
                         this._sighted ? [...state, action] : [state[0], action],
                         {batchSize: this._batchSize})
                     
-                    // const loss = tf.scalar(0.5).mul(tf.losses.meanSquaredError(qValue, target))
-                    const loss = tf.scalar(0.5).mul(tf.mean(qValue.sub(target).square()))
+                    assert(!Array.isArray(qValue));
                     
+                    const loss = tf.scalar(0.5).mul(tf.mean(qValue.sub(target).square()))
                     assertShape(qValue, [this._batchSize, 1]);
 
-                    return loss
+                    return assertScalar(loss);
                 }
             })()
     
             for (const [q, optimizer] of [
-                [this.q1, this.q1Optimizer],
-                [this.q2, this.q2Optimizer]
+                [this.q1, this.q1Optimizer] as const,
+                [this.q2, this.q2Optimizer] as const
             ]) {
-                const qLossFunction = getQLossFunction(q)
-    
-                const { value, grads } = tf.variableGrads(qLossFunction, q.getWeights(true)) // true means trainableOnly
+                const qLossFunction = getQLossFunction(q!)
+
+                const { value, grads } = tf.variableGrads(qLossFunction, getTrainableOnlyWeights(q!));
                 
-                optimizer.applyGradients(grads)
+                optimizer!.applyGradients(grads)
                 
-                if (this._verbose) console.log(q.name + ' Loss: ' + value.arraySync())
+                if (this._verbose) console.log(q!.name + ' Loss: ' + value.arraySync())
             }
         }
 
@@ -210,42 +219,49 @@ export class AgentSac {
          * 
          * @param {state} state 
          */
-        _trainActor(state) {
+        _trainActor(state: tf.Tensor[]) {
             // TODO: consider delayed update of policy and targets (if possible)
-            const actorLossFunction = () => {
-                const [freshAction, logPi] = this.sampleAction(state, true)
+            const actorLossFunction = (): tf.Scalar => {
+                const sampledAction = this.sampleAction(state, true)
+                assert(Array.isArray(sampledAction));
+
+                const [freshAction, logPi] = sampledAction;
                 
-                const q1Value = this.q1.predict(
+                const q1Value = this.q1!.predict(
                     this._sighted ? [...state, freshAction] : [state[0], freshAction],
-                    {batchSize: this._batchSize})
-                const q2Value = this.q2.predict(
+                    {batchSize: this._batchSize});
+                const q2Value = this.q2!.predict(
                     this._sighted ? [...state, freshAction] : [state[0], freshAction], 
-                    {batchSize: this._batchSize})
+                    {batchSize: this._batchSize});
                 
-                const criticValue = tf.minimum(q1Value, q2Value)
+                assert(!Array.isArray(q1Value) && !Array.isArray(q2Value));
+                const criticValue = tf.minimum(q1Value, q2Value);
 
-                const alpha = this._getAlpha()
-                const loss = alpha.mul(logPi).sub(criticValue)
+                const alpha = this._getAlpha();
+                const loss = alpha.mul(logPi).sub(criticValue);
 
-                assertShape(freshAction, [this._batchSize, this._nActions], 'freshAction')
-                assertShape(logPi, [this._batchSize, 1], 'logPi')
-                assertShape(q1Value, [this._batchSize, 1], 'q1Value')
-                assertShape(criticValue, [this._batchSize, 1], 'criticValue')
-                assertShape(loss, [this._batchSize, 1], 'alpha loss')
+                assertShape(freshAction, [this._batchSize, this._nActions]);
+                assertShape(logPi, [this._batchSize, 1]);
+                assertShape(q1Value, [this._batchSize, 1]);
+                assertShape(criticValue, [this._batchSize, 1]);
+                assertShape(loss, [this._batchSize, 1]);
 
                 return tf.mean(loss)
             }
             
-            const { value, grads } = tf.variableGrads(actorLossFunction, this.actor.getWeights(true)) // true means trainableOnly
+            const { value, grads } = tf.variableGrads(actorLossFunction, getTrainableOnlyWeights(this.actor!)) // true means trainableOnly
             
-            this.actorOptimizer.applyGradients(grads)
+            this.actorOptimizer!.applyGradients(grads)
 
             if (this._verbose) console.log('Actor Loss: ' + value.arraySync())
         }
 
-        _trainAlpha(state) {
-            const alphaLossFunction = () => {
-                const [, logPi] = this.sampleAction(state, true)
+        _trainAlpha(state: tf.Tensor[]) {
+            const alphaLossFunction = (): tf.Scalar => {
+                const sampledAction = this.sampleAction(state, true)
+                assert(Array.isArray(sampledAction));
+
+                const [, logPi] = sampledAction;
 
                 const alpha = this._getAlpha()
                 const loss = tf.scalar(-1).mul(
@@ -254,16 +270,15 @@ export class AgentSac {
                     )
                 )
 
-                assertShape(loss, [this._batchSize, 1], 'alpha loss')
-
-                return tf.mean(loss)
+                assertShape(loss, [this._batchSize, 1]);
+                return tf.mean(loss);
             }
             
-            const { value, grads } = tf.variableGrads(alphaLossFunction, [this._logAlpha]) // true means trainableOnly
+            const { value, grads } = tf.variableGrads(alphaLossFunction, [this._logAlpha!]) // true means trainableOnly
             
-            this.alphaOptimizer.applyGradients(grads)
+            this.alphaOptimizer!.applyGradients(grads)
             
-            if (this._verbose) console.log('Alpha Loss: ' + value.arraySync(), tf.exp(this._logAlpha).arraySync())
+            if (this._verbose) console.log('Alpha Loss: ' + value.arraySync(), tf.exp(this._logAlpha!).arraySync())
         }
 
         /**
@@ -272,30 +287,23 @@ export class AgentSac {
          * @param {number} [tau = this._tau] - smoothing constant τ for exponentially moving average: `wTarg <- wTarg*(1-tau) + w*tau`
          */
         updateTargets(tau = this._tau) {
-            tau = tf.scalar(tau)
+          const tau_t = tf.scalar(tau);
+          const q1W = this.q1!.getWeights();
+          const q2W = this.q2!.getWeights();
+          const q1WTarg = this.q1Targ!.getWeights();
+          const q2WTarg = this.q2Targ!.getWeights();
+          const len = q1W.length;
 
-            const
-                q1W = this.q1.getWeights(),
-                q2W = this.q2.getWeights(),
-                q1WTarg = this.q1Targ.getWeights(),
-                q2WTarg = this.q2Targ.getWeights(),
-                len = q1W.length
-
-            // console.log('updateTargets q1W', q1W.map(w=>w.arraySync()))
-            // console.log('updateTargets q1WTarg', q1WTarg.map(w=>w.arraySync()))
-
-            const calc = (w, wTarg) => wTarg.mul(tf.scalar(1).sub(tau)).add(w.mul(tau))
+          const calc = (w: tf.Tensor, wTarg: tf.Tensor) =>
+            wTarg.mul(tf.scalar(1).sub(tau_t)).add(w.mul(tau_t));
             
-            const w1 = [], w2 = []
-            for (let i = 0; i < len; i++) {
-                w1.push(calc(q1W[i], q1WTarg[i]))
-                w2.push(calc(q2W[i], q2WTarg[i]))
-            }
-            
-            this.q1Targ.setWeights(w1)
-            this.q2Targ.setWeights(w2)
-
-
+          const w1 = [], w2 = []
+          for (let i = 0; i < len; i++) {
+            w1.push(calc(q1W[i], q1WTarg[i]));
+            w2.push(calc(q2W[i], q2WTarg[i]));
+          }
+          this.q1Targ!.setWeights(w1);
+          this.q2Targ!.setWeights(w2);
         }
 
         /**
@@ -305,9 +313,12 @@ export class AgentSac {
          * @param {Tensor} [withLogProbs = false] - whether return log probabilities
          * @returns {Tensor || Tensor[]} action and log policy
          */
-        sampleAction(state, withLogProbs = false) { // timer ~3ms
+        sampleAction(state: tf.Tensor[], withLogProbs: boolean = false) { // timer ~3ms
             return tf.tidy(() => {
-                let [ mu, logStd ] = this.actor.predict(this._sighted ? state : state[0], {batchSize: this._batchSize})
+                const prediction = this.actor!.predict(this._sighted ? state : state[0], {batchSize: this._batchSize})
+                assert(Array.isArray(prediction));
+
+                let [mu, logStd] = prediction;
 
                 // https://github.com/rail-berkeley/rlkit/blob/c81509d982b4d52a6239e7bfe7d2540e3d3cd986/rlkit/torch/sac/policies/gaussian_policy.py#L106
                 logStd = tf.clipByValue(logStd, LOG_STD_MIN, LOG_STD_MAX) 
@@ -320,12 +331,11 @@ export class AgentSac {
                 // reparameterization trick: z = mu + std * epsilon
                 let pi = mu.add(std.mul(normal))
 
-                let logPi = this._gaussianLikelihood(pi, mu, logStd)
+                let logPi = this._gaussianLikelihood(pi, mu, logStd);
 
                 ;({ pi, logPi } = this._applySquashing(pi, mu, logPi))
 
-                if (!withLogProbs)
-                    return pi
+                if (!withLogProbs) return pi
         
                 return [pi, logPi]
             })
@@ -340,7 +350,7 @@ export class AgentSac {
          * @param {Tensor} std - standart deviation
          * @returns {Tensor} log probability
          */
-        _logProb(x, mu, std)  {
+        _logProb(x: tf.Tensor, mu: tf.Tensor, std: tf.Tensor): tf.Tensor  {
             const logUnnormalized = tf.scalar(-0.5).mul(
                 tf.squaredDifference(x.div(std), mu.div(std))
             )
@@ -358,7 +368,7 @@ export class AgentSac {
          * @param {Tensor} logStd - log of standart deviation
          * @returns {Tensor} log probability
          */
-        _gaussianLikelihood(x, mu, logStd) {
+        _gaussianLikelihood(x: tf.Tensor, mu: tf.Tensor, logStd: tf.Tensor): tf.Tensor {
             // pre_sum = -0.5 * (
             //     ((x-mu)/(tf.exp(log_std)+EPS))**2 
             //     + 2*log_std 
@@ -386,7 +396,7 @@ export class AgentSac {
          * @param {*} logPi - log probability
          * @returns {{ pi, mu, logPi }} squashed and adjasted input
          */
-        _applySquashing(pi, mu, logPi) {
+        _applySquashing(pi: tf.Tensor, mu: tf.Tensor, logPi: tf.Tensor) {
             // logp_pi -= tf.reduce_sum(2*(np.log(2) - pi - tf.nn.softplus(-2*pi)), axis=1)
 
             const adj = tf.scalar(2).mul(
@@ -411,29 +421,35 @@ export class AgentSac {
          * @param {string} trainable - whether a critic is trainable
          * @returns {tf.LayersModel} model
          */
-        async _getActor(name = 'actor', trainable = true) {
+        async _getActor(name = 'actor', trainable = true): Promise<tf.LayersModel> {
             const checkpoint = await this._loadCheckpoint(name)
             if (checkpoint) return checkpoint
 
-            let outputs = this._telemetryInput
-            // outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(outputs)
+            let outputs = tf.layers.dense({ units: 256, activation: 'relu' }).apply(
+              this._sighted
+                ? tf.layers.concatenate().apply([
+                  this._getConvEncoder(this._frameInputL!),
+                  this._getConvEncoder(this._frameInputR!),
+                  this._telemetryInput!,
+                ])
+                : this._telemetryInput!
+            );
 
-            if (this._sighted) {
-                let convOutputL = this._getConvEncoder(this._frameInputL)
-                let convOutputR = this._getConvEncoder(this._frameInputR)
-                // let convOutput = tf.layers.concatenate().apply([convOutputL, convOutputR])
-                // convOutput = tf.layers.dense({units: 10, activation: 'relu'}).apply(convOutput)
-
-                outputs = tf.layers.concatenate().apply([convOutputL, convOutputR, outputs])
-            }
-
-            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
             outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
 
             const mu     = tf.layers.dense({units: this._nActions}).apply(outputs)
             const logStd = tf.layers.dense({units: this._nActions}).apply(outputs)
 
-            const model = tf.model({inputs: this._sighted ? [this._telemetryInput, this._frameInputL, this._frameInputR] : [this._telemetryInput], outputs: [mu, logStd], name})
+            assert(mu instanceof tf.SymbolicTensor && logStd instanceof tf.SymbolicTensor);
+
+            const model = tf.model({
+                inputs:
+                    this._sighted
+                        ? [this._telemetryInput!, this._frameInputL!, this._frameInputR!]
+                        : [this._telemetryInput!],
+                outputs: [mu, logStd],
+                name,
+            })
             model.trainable = trainable
 
             if (this._verbose) {
@@ -444,7 +460,7 @@ export class AgentSac {
                 model.summary()
             }
 
-            return model
+            return model;
         }
 
         /**
@@ -458,28 +474,32 @@ export class AgentSac {
             const checkpoint = await this._loadCheckpoint(name)
             if (checkpoint) return checkpoint
 
-            let outputs = tf.layers.concatenate().apply([this._telemetryInput, this._actionInput])
+            const base = tf.layers.concatenate().apply([this._telemetryInput!, this._actionInput!])
+            assert(base instanceof tf.SymbolicTensor);
             // outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(outputs)
 
-            if (this._sighted) {
-                let convOutputL = this._getConvEncoder(this._frameInputL)
-                let convOutputR = this._getConvEncoder(this._frameInputR)
-                // let convOutput = tf.layers.concatenate().apply([convOutputL, convOutputR])
-                // convOutput = tf.layers.dense({units: 10, activation: 'relu'}).apply(convOutput)
 
-                outputs = tf.layers.concatenate().apply([convOutputL, convOutputR, outputs])
-            }
+            let outputs = tf.layers.dense({ units: 256, activation: 'relu' }).apply(
+                this._sighted
+                    ? tf.layers.concatenate().apply([
+                        this._getConvEncoder(this._frameInputL!),
+                        this._getConvEncoder(this._frameInputR!),
+                        base,
+                        ])
+                    : base
+            );
 
-            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
-            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
+            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs);
+            outputs = tf.layers.dense({units: 1}).apply(outputs);
 
-            outputs = tf.layers.dense({units: 1}).apply(outputs)
+            assert(outputs instanceof tf.SymbolicTensor);
 
             const model = tf.model({
                 inputs: this._sighted 
-                    ? [this._telemetryInput, this._frameInputL, this._frameInputR, this._actionInput] 
-                    : [this._telemetryInput, this._actionInput],
-                outputs, name
+                    ? [this._telemetryInput!, this._frameInputL!, this._frameInputR!, this._actionInput!] 
+                    : [this._telemetryInput!, this._actionInput!],
+                outputs,
+                name,
             })
 
             model.trainable = trainable
@@ -509,7 +529,8 @@ export class AgentSac {
          * @param {Tensor} inputs - input for the conv layers
          * @returns outputs
          */
-         _getConvEncoder(inputs) {
+         _getConvEncoder(inputs: tf.SymbolicTensor): tf.SymbolicTensor {
+
             const kernelSize = 3
             const padding = 'valid'
             const poolSize = 3
@@ -519,10 +540,8 @@ export class AgentSac {
             const kernelInitializer = 'glorotNormal'
             const biasInitializer = 'glorotNormal'
 
-            let outputs = inputs
-            
             // 32x8x4 -> 64x4x2 -> 64x3x1 -> 64x4x1
-            outputs = tf.layers.conv2d({
+            let outputs = tf.layers.conv2d({
                 filters: 16,
                 kernelSize: 5,
                 strides: 2,
@@ -531,7 +550,7 @@ export class AgentSac {
                 biasInitializer,
                 activation: 'relu',
                 trainable: true
-            }).apply(outputs)
+            }).apply(inputs)
             outputs = tf.layers.maxPooling2d({poolSize:2}).apply(outputs)
             // 
             // outputs = tf.layers.layerNormalization().apply(outputs)
@@ -590,6 +609,8 @@ export class AgentSac {
 
             // convOutputs = tf.layers.dense({units: 96, activation: 'relu'}).apply(convOutputs)
 
+             console.log('here with the shit');
+            assert(outputs instanceof tf.SymbolicTensor);
             return outputs
         }
 
@@ -600,7 +621,7 @@ export class AgentSac {
          */
         _getAlpha() {
             // return tf.maximum(tf.exp(this._logAlpha), tf.scalar(this._minAlpha))
-            return tf.exp(this._logAlpha)
+            return tf.exp(this._logAlpha!)
         }
 
         /**
@@ -614,7 +635,19 @@ export class AgentSac {
 
             const checkpoint = await this._loadCheckpoint(name)
             if (checkpoint) {
-                logAlpha = checkpoint.getWeights()[0].arraySync()[0][0]
+                const [weights] = checkpoint.getWeights();
+                assert(weights);
+
+                const arraySync = weights.arraySync();
+                assert(Array.isArray(arraySync));
+
+                const [children] = arraySync;
+                assert(Array.isArray(children));
+
+                const [child] = children;
+                assert(typeof child === 'number');
+
+                logAlpha = child;
 
                 if (this._verbose)
                     console.log('Checkpoint alpha: ', logAlpha)
@@ -637,15 +670,15 @@ export class AgentSac {
         async checkpoint() {
             if (!this._trainable) throw new Error('(╭ರ_ ⊙ )')
 
-            this._logAlphaPlaceholder.setWeights([tf.tensor([this._logAlpha.arraySync()], [1, 1])])
+            this._logAlphaPlaceholder!.setWeights([tf.tensor([this._logAlpha!.arraySync()], [1, 1])])
 
             await Promise.all([
-                this._saveCheckpoint(this.actor),
-                this._saveCheckpoint(this.q1),
-                this._saveCheckpoint(this.q2),
-                this._saveCheckpoint(this.q1Targ),
-                this._saveCheckpoint(this.q2Targ),
-                this._saveCheckpoint(this._logAlphaPlaceholder)
+                this._saveCheckpoint(this.actor!),
+                this._saveCheckpoint(this.q1!),
+                this._saveCheckpoint(this.q2!),
+                this._saveCheckpoint(this.q1Targ!),
+                this._saveCheckpoint(this.q2Targ!),
+                this._saveCheckpoint(this._logAlphaPlaceholder!)
             ])
 
             if (this._verbose) 
@@ -657,7 +690,7 @@ export class AgentSac {
          * 
          * @param {tf.LayersModel} model 
          */
-        async _saveCheckpoint(model) {
+        async _saveCheckpoint(model: tf.LayersModel) {
             const key = this._getChKey(model.name)
             const saveResults = await model.save(key)
 
@@ -671,7 +704,7 @@ export class AgentSac {
          * @param {string} name model name
          * @returns {tf.LayersModel} model
          */
-        async _loadCheckpoint(name) {
+        async _loadCheckpoint(name: string) {
 // return
             if (this._forced) {
                 console.log('Forced to not load from the checkpoint ' + name)
@@ -700,7 +733,7 @@ export class AgentSac {
          * @param {tf.LayersModel} name model name
          * @returns {string} key
          */
-        _getChKey(name) {
+        _getChKey(name: string) {
             return 'indexeddb://' + name + '-' + VERSION
         }
     }

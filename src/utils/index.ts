@@ -10,4 +10,17 @@ export const getRandomInt = (min: number, max: number)  => {
 };
 
 export const assertShape = (tensor: tf.Tensor, shape: readonly number[]) =>
-  assert(isEqual(tensor.shape, shape))
+  assert(isEqual(tensor.shape, shape));
+
+export const assertScalar = (t: tf.Tensor): tf.Scalar => {
+  assert(t.rank === 0);
+  return t as tf.Scalar;
+};
+
+export const getTrainableOnlyWeights = (layersModel: tf.LayersModel) =>
+  layersModel
+    .getWeights(true /* trainableOnly */)
+    .map(w => {
+      assert(w instanceof tf.Variable);
+      return w;
+    });
