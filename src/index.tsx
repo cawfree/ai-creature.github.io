@@ -243,19 +243,23 @@ const createScene = async ({
     return scene
 };
 
-const createCreatureRegisterAfterRender = ({
+const createCreatureEngine = async ({
   agent,
-  engine,
   onTransitionPublished,
+  whileNotBusyWhenReady,
 }: {
   readonly agent: AgentSac;
-  readonly engine: BABYLON.Engine;
   // TODO: need strong typing
   readonly onTransitionPublished: (transition: Omit<Transition, 'nextState'>) => void;
+  readonly whileNotBusyWhenReady: (fn: Function) => void;
 }) => {
   assert(agent);
-  assert(engine);
   assert(typeof onTransitionPublished === 'function');
+
+  await Ammo();
+  
+  const engine = createDefaultEngine();
+  window.addEventListener('resize', () => void engine.resize());
 
   const TRANSITIONS_BUFFER_SIZE = 2;
 
@@ -396,15 +400,19 @@ const createCreatureRegisterAfterRender = ({
     frameStack.length = 0;
   };
 
-  return {registerAfterRender};
+  const sceneToRender = await createScene({
+    engine,
+    registerAfterRender:
+      whileNotBusyWhenReady(registerAfterRender),
+  });
+  
+  return engine.runRenderLoop(() => {
+    if (!sceneToRender?.activeCamera) return;
+    return sceneToRender.render();
+  });
 };
 
-(async () => {
-  await Ammo();
-  
-  const engine = createDefaultEngine();
-  window.addEventListener('resize', () => void engine.resize());
-
+(async () => { 
   const agent = new AgentSac({trainable: false, verbose: false})
   await agent.init();
 
@@ -437,23 +445,12 @@ const createCreatureRegisterAfterRender = ({
     }
   };
 
-  const {registerAfterRender} = createCreatureRegisterAfterRender({
+  return createCreatureEngine({
     agent,
-    engine,
     // TODO: verify this is respected.
     onTransitionPublished: (transition: Omit<Transition, 'nextState'>) =>
       void worker.postMessage({action: 'newTransition', transition}),
-  });
-
-  const sceneToRender = await createScene({
-    engine,
-    registerAfterRender:
-      whileNotBusyWhenReady(registerAfterRender),
-  });
-  
-  return engine.runRenderLoop(() => {
-    if (!sceneToRender?.activeCamera) return;
-    return sceneToRender.render();
-  });
+    whileNotBusyWhenReady,
+  }); 
 })();
 
