@@ -37,12 +37,18 @@ document.getElementById('dislike').addEventListener('click', () => {
 
 window.transitions = []
 
+const base64ToImg = (base64: string) => new Promise((resolve) => {
+  const img = new Image()
+  img.src = base64
+  return void (img.onload = () => resolve(img));
+});
+
 const createScene = async ({
-  agent,
   engine,
+  registerAfterRender,
 }: {
-  readonly agent: AgentSac;
   readonly engine: BABYLON.Engine;
+  readonly registerAfterRender: Function;
 }) => {
 
     // This creates a basic Babylon Scene object (non-mesh)
@@ -214,22 +220,7 @@ const createScene = async ({
         ball.material.backFaceCulling = false
     });
 
-    /* WORKER */
-    let inited = false 
-    const worker = new Worker(new URL('./worker.ts', import.meta.url), {type: 'module'});
-
-    worker.addEventListener('message', e => {
-        const { weights, frame } = e.data
-
-        tf.tidy(() => {
-            if (weights) {
-                inited = true
-                agent.actor.setWeights(weights.map(w => tf.tensor(w))) // timer ~30ms
-                if (Math.random() > 0.99) console.log('weights:', weights)
-            }
-
-        })
-    })
+    
 
     /* COLLISIONS DETECTION */
     const impostors = scene.getPhysicsEngine()._impostors.filter(im => im.object.id !== creature.id)
@@ -242,32 +233,67 @@ const createScene = async ({
             }
         }
     })
-
-    const base64ToImg = (base64) => new Promise((res, _) => {
-        const img = new Image()
-        img.src = base64
-        img.onload = () => res(img)
-    })
-    const TRANSITIONS_BUFFER_SIZE = 2
     const frameEvery = 1000/30 // ~33ms ~24frames/sec
-    const frameStack = []
 
-    let timer = Date.now() 
-    let busy = false
-    let stateId = 0
-
-    let prevLinearVelocity = BABYLON.Vector3.Zero()
     window.collision = BABYLON.Vector3.Zero()
     window.reward = 0
 
-    const testLayer = agent.actor.layers[4]
-    const spy = tf.model({inputs: agent.actor.inputs, outputs: testLayer.output})
+    void scene.registerAfterRender(() => registerAfterRender({
+      scene,
+      creature,
+      crCameraLeft,
+      crCameraRight,
+    }));
 
-    scene.registerAfterRender(async () => { // timer ~ 20-90ms
-        if (busy || !inited) return
-        busy = true
+    return scene
+};
 
-        //delay
+(async () => {
+  await Ammo();
+  
+  const engine = createDefaultEngine();
+  window.addEventListener('resize', () => void engine.resize());
+
+  const agent = new AgentSac({trainable: false, verbose: false})
+  await agent.init();
+
+  const TRANSITIONS_BUFFER_SIZE = 2;
+
+  let stateId = 0;
+  let inited = false;
+  let busy = false;
+  let timer = Date.now();
+  let prevLinearVelocity = BABYLON.Vector3.Zero();
+
+  const frameStack = [];
+
+  const worker = new Worker(new URL('./worker.ts', import.meta.url), {type: 'module'});
+
+  void worker.addEventListener('message', e => {
+    const {weights, frame} = e.data;
+
+    void tf.tidy(() => {
+      if (weights) {
+        inited = true
+        agent.actor.setWeights(weights.map(w => tf.tensor(w))) // timer ~30ms
+        if (Math.random() > 0.99) console.log('weights:', weights)
+      }
+    });
+  });
+
+  const sceneToRender = await createScene({
+    engine,
+    registerAfterRender: async ({
+      scene,
+      creature,
+      crCameraLeft,
+      crCameraRight,
+    }) => {
+      if (busy || !inited) return;
+
+      try {
+        busy = true;
+
         if (!frameStack.length) {
             frameStack.push([
                 await BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraLeft, { // ~ 7-60ms
@@ -348,12 +374,6 @@ const createScene = async ({
             console.time('await')
             const [framesArrL, framesArrR,[actionArr]] = await Promise.all([...(framesNorm.map(fr => fr.array())), action.array()]) // action come as a batch of size 1
             console.timeEnd('await')
-            // DEBUG Conv encoder
-            tf.tidy(() => { // timer ~2.5ms
-                const testOutput = spy.predict([telemetryBatch, ...framesBatch], {batchSize: 1})
-                console.log('spy', testLayer.name, testOutput.arraySync())
-                return
-            });
 
             const impulse = actionArr.slice(0, 3);
             console.assert(actionArr.length === 3, actionArr.length)
@@ -408,32 +428,18 @@ const createScene = async ({
 
             }
 
-            framesNorm.map(fr => fr.dispose())
-            framesBatch.map(fr => fr.dispose())
-            telemetryBatch.dispose()
-            action.dispose()
-
-            frameStack.length = 0 // I will regret about this :D
+            framesNorm.map(fr => fr.dispose());
+            framesBatch.map(fr => fr.dispose());
+            telemetryBatch.dispose();
+            action.dispose();
+            frameStack.length = 0;
         }
-
-        busy = false
-    })
-
-    return scene
-};
-
-(async () => {
-  await Ammo();
-  
-  const engine = createDefaultEngine();
-  window.addEventListener('resize', () => void engine.resize());
-
-  const agent = new AgentSac({trainable: false, verbose: false})
-  await agent.init();
-
-  const sceneToRender = await createScene({
-    agent,
-    engine,
+      } catch (e) {
+        console.error(e);
+      } finally {
+        busy = false;
+      }
+    },
   });
   
   return engine.runRenderLoop(() => {
