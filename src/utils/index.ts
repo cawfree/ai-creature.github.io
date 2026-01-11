@@ -4,6 +4,7 @@ import isEqual from 'react-fast-compare';
 
 import {AgentSacConstructorProps} from '../@types';
 import {AgentSac, AgentSacTrainable} from '../classes';
+import {VERSION} from '../constants';
 
 // https://stackoverflow.com/questions/1527803/generating-random-whole-numbers-in-javascript-in-a-specific-range
 export const getRandomInt = (min: number, max: number)  => {
@@ -36,6 +37,21 @@ export const getTrainableOnlyWeights = (layersModel: tf.LayersModel) =>
       assert(w instanceof tf.Variable);
       return w;
     });
+
+const getModelKey = (modelName: string) => `indexeddb://${modelName}-${VERSION}`;
+
+export const saveModel = (
+  model: tf.LayersModel
+) => model.save(getModelKey(model.name));
+
+export const loadModelByName = async (
+  modelName: string
+): Promise<tf.LayersModel | null> => {
+  const key = getModelKey(modelName);
+  const modelsInfo = await tf.io.listModels();
+  if (key in modelsInfo) return tf.loadLayersModel(key);
+  return null;
+};
 
 export const createAgentSac = async ({
   agentSacProps,

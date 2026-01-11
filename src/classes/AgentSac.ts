@@ -7,10 +7,10 @@ import {
   LOG_STD_MAX,
   LOG_STD_MIN,
   NAME,
-  VERSION,
 } from '../constants';
 
 import {Initializable} from './Initializable';
+import {loadModelByName} from '../utils';
 
 export class AgentSac extends Initializable {
 
@@ -22,8 +22,6 @@ export class AgentSac extends Initializable {
   _nTelemetry: number;
   _gamma: number;
   _tau: number;
-  _verbose: boolean;
-  _forced: boolean;
   _sighted: boolean;
   _rewardScale: number;
   _frameStackShape: [number, number, number];
@@ -45,8 +43,6 @@ export class AgentSac extends Initializable {
     nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
     gamma = 0.99, // Discount factor (γ)
     tau = 5e-3, // Target smoothing coefficient (τ)
-    verbose = false,
-    forced = false, // force to create fresh models (not from checkpoint)
     sighted = true,
     rewardScale = 10
   }: Partial<AgentSacConstructorProps> = Object.create(null)) {
@@ -58,8 +54,6 @@ export class AgentSac extends Initializable {
     this._nTelemetry = nTelemetry;
     this._gamma = gamma;
     this._tau = tau;
-    this._verbose = verbose;
-    this._forced = forced;
     this._sighted = sighted;
     this._rewardScale = rewardScale;
     this._frameStackShape = [...this._frameShape.slice(0, 2), this._frameShape[2] * this._nFrames] as [number, number, number];
@@ -193,8 +187,8 @@ export class AgentSac extends Initializable {
          * @returns {tf.LayersModel} model
          */
         async _getActor(name = 'actor'): Promise<tf.LayersModel> {
-            const checkpoint = await this._loadCheckpoint(name)
-            if (checkpoint) return checkpoint
+            const checkpoint = await loadModelByName(name);
+            if (checkpoint) return checkpoint;
 
             let outputs = tf.layers.dense({ units: 256, activation: 'relu' }).apply(
               this._sighted
@@ -221,15 +215,6 @@ export class AgentSac extends Initializable {
                 outputs: [mu, logStd],
                 name,
             })
-
-            if (this._verbose) {
-                console.log('==========================')
-                console.log('==========================')
-                console.log('Actor ' + name + ': ')
-
-                model.summary()
-            }
-
             return model;
         } 
 
@@ -341,7 +326,7 @@ export class AgentSac extends Initializable {
         async _getLogAlpha(name = 'alpha') {
             let logAlpha = 0.0
 
-            const checkpoint = await this._loadCheckpoint(name)
+            const checkpoint = await loadModelByName(name);
             if (checkpoint) {
                 const [weights] = checkpoint.getWeights();
                 assert(weights);
@@ -356,10 +341,6 @@ export class AgentSac extends Initializable {
                 assert(typeof child === 'number');
 
                 logAlpha = child;
-
-                if (this._verbose)
-                    console.log('Checkpoint alpha: ', logAlpha)
-                    
             } else {
                 const model = tf.sequential({ name });
                 model.add(tf.layers.dense({ units: 1, inputShape: [1], useBias: false }))
@@ -374,50 +355,9 @@ export class AgentSac extends Initializable {
          * 
          * @param {tf.LayersModel} model 
          */
-        async _saveCheckpoint(model: tf.LayersModel) {
-            const key = this._getChKey(model.name)
-            const saveResults = await model.save(key)
-
-            if (this._verbose) 
-                console.log('Checkpoint saveResults', model.name, saveResults)
-        }
-
-        /**
-         * Loads saved checkpoint from the storage.
-         * 
-         * @param {string} name model name
-         * @returns {tf.LayersModel} model
-         */
-        async _loadCheckpoint(name: string) {
-// return
-            if (this._forced) {
-                console.log('Forced to not load from the checkpoint ' + name)
-                return
-            }
-
-            const key = this._getChKey(name)
-            const modelsInfo = await tf.io.listModels()
-
-            if (key in modelsInfo) {
-                const model = await tf.loadLayersModel(key)
-
-                if (this._verbose) 
-                    console.log('Loaded checkpoint for ' + name)
-
-                return model
-            }
-            
-            if (this._verbose) 
-                console.log('Checkpoint not found for ' + name)
-        }
         
-        /**
-         * Builds the key for the model weights in LocalStorage.
-         * 
-         * @param {tf.LayersModel} name model name
-         * @returns {string} key
-         */
-        _getChKey(name: string) {
-            return 'indexeddb://' + name + '-' + VERSION
-        }
+
+        
+        
+        
     }

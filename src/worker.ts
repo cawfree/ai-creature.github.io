@@ -14,7 +14,6 @@ void (async () => {
     const {agent} = await createAgentSacTrainable({
       agentSacProps: {
         batchSize: 100,
-        verbose: true,
       },
     });
 

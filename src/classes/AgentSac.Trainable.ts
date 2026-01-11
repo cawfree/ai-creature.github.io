@@ -7,6 +7,8 @@ import {
   assertScalar,
   assertShape,
   getTrainableOnlyWeights,
+  loadModelByName,
+  saveModel,
 } from '../utils';
 
 import {AgentSac} from './AgentSac';
@@ -60,7 +62,7 @@ export class AgentSacTrainable extends AgentSac {
   }
 
   async _getCritic(name = 'critic') {
-    const checkpoint = await this._loadCheckpoint(name)
+    const checkpoint = await loadModelByName(name);
     if (checkpoint) return checkpoint
 
     const base = tf.layers.concatenate().apply([this._telemetryInput!, this._actionInput!])
@@ -90,15 +92,6 @@ export class AgentSacTrainable extends AgentSac {
     })
 
     model.trainable = true;
-
-    if (this._verbose) {
-        console.log('==========================')
-        console.log('==========================')
-        console.log('CRITIC ' + name + ': ')
-  
-        model.summary()
-    }
-
     return model
   }
 
@@ -176,8 +169,6 @@ export class AgentSacTrainable extends AgentSac {
           const { value, grads } = tf.variableGrads(qLossFunction, getTrainableOnlyWeights(q!));
           
           optimizer!.applyGradients(grads)
-          
-          if (this._verbose) console.log(q!.name + ' Loss: ' + value.arraySync())
       }
   }
 
@@ -219,8 +210,6 @@ export class AgentSacTrainable extends AgentSac {
       const { value, grads } = tf.variableGrads(actorLossFunction, getTrainableOnlyWeights(this.actor!)) // true means trainableOnly
       
       this.actorOptimizer!.applyGradients(grads)
-
-      if (this._verbose) console.log('Actor Loss: ' + value.arraySync())
   }
 
   _trainAlpha(state: tf.Tensor[]) {
@@ -244,8 +233,6 @@ export class AgentSacTrainable extends AgentSac {
       const { value, grads } = tf.variableGrads(alphaLossFunction, [this._logAlpha!]) // true means trainableOnly
       
       this.alphaOptimizer!.applyGradients(grads)
-      
-      if (this._verbose) console.log('Alpha Loss: ' + value.arraySync(), tf.exp(this._logAlpha!).arraySync())
   }
 
   /**
@@ -279,14 +266,12 @@ export class AgentSacTrainable extends AgentSac {
 
   async checkpoint() {
     await Promise.all([
-      this._saveCheckpoint(this.actor!),
-      this._saveCheckpoint(this.q1!),
-      this._saveCheckpoint(this.q2!),
-      this._saveCheckpoint(this.q1Targ!),
-      this._saveCheckpoint(this.q2Targ!),
+      saveModel(this.actor!),
+      saveModel(this.q1!),
+      saveModel(this.q2!),
+      saveModel(this.q1Targ!),
+      saveModel(this.q2Targ!),
     ]);
-
-    if (this._verbose) console.log('Checkpoint successfully saved!');
   }
 
 }
