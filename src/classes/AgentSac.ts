@@ -1,16 +1,15 @@
 import assert from 'minimalistic-assert';
 import * as tf from '@tensorflow/tfjs';
 
-import {AgentSacConstructorProps} from '../@types';
+import {AgentSacInstanceProps} from '../@types';
 import {
   EPSILON,
   LOG_STD_MAX,
   LOG_STD_MIN,
-  NAME,
 } from '../constants';
 
 import {Initializable} from './Initializable';
-import {createActor, createConvEncoder, loadModelByName} from '../utils';
+import {createActor, loadModelByName} from '../utils';
 
 export class AgentSac extends Initializable {
 
@@ -28,48 +27,31 @@ export class AgentSac extends Initializable {
   _targetEntropy: number;
 
   /* initialization */
-  _frameInputL?: tf.SymbolicTensor;
-  _frameInputR?: tf.SymbolicTensor;
-  _telemetryInput?: tf.SymbolicTensor;
+  _frameInputL: tf.SymbolicTensor;
+  _frameInputR: tf.SymbolicTensor;
+  _telemetryInput: tf.SymbolicTensor;
 
   /* actor */
-  actor?: tf.LayersModel; 
+  actor: tf.LayersModel; 
 
-  constructor({
-    batchSize = 1, 
-    frameShape = [25, 25, 3], 
-    nFrames = 1, // Number of stacked frames per state
-    nActions = 3, // 3 - impuls, 3 - RGB color
-    nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
-    gamma = 0.99, // Discount factor (γ)
-    tau = 5e-3, // Target smoothing coefficient (τ)
-    sighted = true,
-    rewardScale = 10
-  }: Partial<AgentSacConstructorProps> = Object.create(null)) {
+  constructor(props: AgentSacInstanceProps) {
     super();
-    this._batchSize = batchSize;
-    this._frameShape = frameShape;
-    this._nFrames = nFrames;
-    this._nActions = nActions;
-    this._nTelemetry = nTelemetry;
-    this._gamma = gamma;
-    this._tau = tau;
-    this._sighted = sighted;
-    this._rewardScale = rewardScale;
-    this._frameStackShape = [...this._frameShape.slice(0, 2), this._frameShape[2] * this._nFrames] as [number, number, number];
-    // https://github.com/rail-berkeley/softlearning/blob/13cf187cc93d90f7c217ea2845067491c3c65464/softlearning/algorithms/sac.py#L37
-    this._targetEntropy = -nActions;
+    this._batchSize = props.batchSize;
+    this._frameShape = props.frameShape;
+    this._nFrames = props.nFrames;
+    this._nActions = props.nActions;
+    this._nTelemetry = props.nTelemetry;
+    this._gamma = props.gamma;
+    this._tau = props.tau;
+    this._sighted = props.sighted;
+    this._rewardScale = props.rewardScale;
+    this._frameStackShape = props.frameStackShape;
+    this._targetEntropy = props.targetEntropy;
+    this._frameInputL = props.frameInputL;
+    this._frameInputR = props.frameInputR;
+    this._telemetryInput = props.telemetryInput;
+    this.actor = props.actor;
   }
-
-  async initialize() {
-    await super.initialize();
-
-    this._frameInputL = tf.input({batchShape : [null, ...this._frameStackShape]});
-    this._frameInputR = tf.input({batchShape : [null, ...this._frameStackShape]});
-    this._telemetryInput = tf.input({batchShape : [null, this._nTelemetry]});
-      
-    this.actor = await this._getActor(NAME.ACTOR);
-  }  
 
         /**
          * Returns actions sampled from normal distribution using means and stds predicted by the actor.

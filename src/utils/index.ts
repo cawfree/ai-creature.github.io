@@ -2,9 +2,9 @@ import * as tf from '@tensorflow/tfjs';
 import assert from 'minimalistic-assert';
 import isEqual from 'react-fast-compare';
 
-import {AgentSacConstructorProps} from '../@types';
+import {AgentSacConstructorProps, AgentSacInstanceProps} from '../@types';
 import {AgentSac, AgentSacTrainable} from '../classes';
-import {VERSION} from '../constants';
+import {NAME, VERSION} from '../constants';
 
 // https://stackoverflow.com/questions/1527803/generating-random-whole-numbers-in-javascript-in-a-specific-range
 export const getRandomInt = (min: number, max: number)  => {
@@ -133,22 +133,89 @@ export const createActor = async ({
   });
 };
 
-export const createAgentSac = async ({
-  agentSacProps,
+const createAgentSacInstanceProps = async ({
+  actorName,
+  agentSacProps: {
+    batchSize = 1, 
+    frameShape = [25, 25, 3], 
+    nFrames = 1, // Number of stacked frames per state
+    nActions = 3, // 3 - impuls, 3 - RGB color
+    nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
+    gamma = 0.99, // Discount factor (γ)
+    tau = 5e-3, // Target smoothing coefficient (τ)
+    sighted = true,
+    rewardScale = 10,
+  },
 }: {
+  readonly actorName: string;
+  readonly agentSacProps: Partial<AgentSacConstructorProps>;
+}): Promise<AgentSacInstanceProps> => {
+  const frameStackShape = [...frameShape.slice(0, 2), frameShape[2] * nFrames] as [number, number, number];
+
+  const frameInputL = tf.input({batchShape : [null, ...frameStackShape]});
+  const frameInputR = tf.input({batchShape : [null, ...frameStackShape]});
+  const telemetryInput = tf.input({batchShape : [null, nTelemetry]});
+      
+  const maybeSavedActor = await loadModelByName(actorName);
+
+  const actor: tf.LayersModel = maybeSavedActor ?? (
+    await createActor({
+      frameInputL,
+      frameInputR,
+      nActions,
+      name: actorName,
+      sighted,
+      telemetryInput,
+    })
+  );
+
+  return {
+    batchSize,
+    frameShape,
+    nFrames,
+    nActions,
+    nTelemetry,
+    gamma,
+    tau,
+    sighted,
+    rewardScale,
+    frameStackShape,
+    // https://github.com/rail-berkeley/softlearning/blob/13cf187cc93d90f7c217ea2845067491c3c65464/softlearning/algorithms/sac.py#L37
+    targetEntropy: -nActions,
+    frameInputL,
+    frameInputR,
+    telemetryInput,
+    actor,
+  };
+};
+
+export const createAgentSac = async ({
+  // TODO: force specify name
+  actorName = NAME.ACTOR,
+  agentSacProps = Object.create(null),
+}: {
+  readonly actorName?: string;
   readonly agentSacProps?: Partial<AgentSacConstructorProps>;
 } = Object.create(null)) => {
-  const agent = new AgentSac(agentSacProps);
+  const agentSacInstanceProps =
+    await createAgentSacInstanceProps({actorName, agentSacProps});
+  const agent = new AgentSac(agentSacInstanceProps);
+  // TODO: remove `Initializable`.
   await agent.initialize();
   return {agent};
 };
 
 export const createAgentSacTrainable = async ({
-  agentSacProps, 
+  // TODO: force specify name
+  actorName = NAME.ACTOR,
+  agentSacProps = Object.create(null),
 }: {
+  readonly actorName?: string;
   readonly agentSacProps?: Partial<AgentSacConstructorProps>;
 } = Object.create(null)) => {
-  const agent = new AgentSacTrainable(agentSacProps);
+  const agentSacInstanceProps =
+    await createAgentSacInstanceProps({actorName, agentSacProps});
+  const agent = new AgentSacTrainable(agentSacInstanceProps);
   await agent.initialize();
   await agent.checkpoint();
   return {agent};

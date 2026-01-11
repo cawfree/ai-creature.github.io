@@ -28,3 +28,14 @@ export type AgentSacConstructorProps = {
   readonly sighted: boolean;
   readonly rewardScale: number;
 };
+
+export type AgentSacInstanceProps =
+  & AgentSacConstructorProps
+  & {
+    readonly frameStackShape: [number, number, number];
+    readonly targetEntropy: number;
+    readonly frameInputL: tf.SymbolicTensor;
+    readonly frameInputR: tf.SymbolicTensor;
+    readonly telemetryInput: tf.SymbolicTensor;
+    readonly actor: tf.LayersModel; 
+  };
