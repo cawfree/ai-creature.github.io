@@ -29,7 +29,6 @@ export type AgentSacConstructorProps = {
   // force to create fresh models (not from checkpoint)
   readonly forced: boolean;
   // for tests
-  readonly prefix: string;
   readonly sighted: boolean;
   readonly rewardScale: number;
 };

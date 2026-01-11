@@ -38,16 +38,16 @@ export class AgentSacTrainable extends AgentSac {
 
     this._actionInput = tf.input({batchShape: [null, this._nActions]});
 
-    this.q1 = await this._getCritic(this._prefix + NAME.Q1);
+    this.q1 = await this._getCritic(NAME.Q1);
     this.q1Optimizer = tf.train.adam();
 
-    this.q2 = await this._getCritic(this._prefix + NAME.Q2);
+    this.q2 = await this._getCritic(NAME.Q2);
     this.q2Optimizer = tf.train.adam();
 
-    this.q1Targ = await this._getCritic(this._prefix + NAME.Q1_TARGET);
-    this.q2Targ = await this._getCritic(this._prefix + NAME.Q2_TARGET);
+    this.q1Targ = await this._getCritic(NAME.Q1_TARGET);
+    this.q2Targ = await this._getCritic(NAME.Q2_TARGET);
 
-    this._logAlpha = await this._getLogAlpha(this._prefix + NAME.ALPHA);
+    this._logAlpha = await this._getLogAlpha(NAME.ALPHA);
     this.alphaOptimizer = tf.train.adam();
 
     this.updateTargets(1);

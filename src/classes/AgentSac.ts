@@ -22,9 +22,7 @@ export class AgentSac extends Initializable {
   _nTelemetry: number;
   _gamma: number;
   _tau: number;
-  //_trainable: boolean;
   _verbose: boolean;
-  _prefix: string;
   _forced: boolean;
   _sighted: boolean;
   _rewardScale: number;
@@ -50,10 +48,8 @@ export class AgentSac extends Initializable {
     nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
     gamma = 0.99, // Discount factor (γ)
     tau = 5e-3, // Target smoothing coefficient (τ)
-    //trainable = true, // Whether the actor is trainable
     verbose = false,
     forced = false, // force to create fresh models (not from checkpoint)
-    prefix = '', // for tests,
     sighted = true,
     rewardScale = 10
   }: Partial<AgentSacConstructorProps> = Object.create(null)) {
@@ -66,7 +62,6 @@ export class AgentSac extends Initializable {
     this._gamma = gamma;
     this._tau = tau;
     this._verbose = verbose;
-    this._prefix = (prefix === '' ? '' : prefix + '-');
     this._forced = forced;
     this._sighted = sighted;
     this._rewardScale = rewardScale;
@@ -82,7 +77,7 @@ export class AgentSac extends Initializable {
     this._frameInputR = tf.input({batchShape : [null, ...this._frameStackShape]});
     this._telemetryInput = tf.input({batchShape : [null, this._nTelemetry]});
       
-    this.actor = await this._getActor(this._prefix + NAME.ACTOR);
+    this.actor = await this._getActor(NAME.ACTOR);
   }  
 
         /**
