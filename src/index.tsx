@@ -35,8 +35,6 @@ document.getElementById('dislike').addEventListener('click', () => {
   window.reward = -1
 });
 
-window.transitions = []
-
 const base64ToImg = (base64: string) => new Promise((resolve) => {
   const img = new Image()
   img.src = base64
@@ -152,8 +150,6 @@ const createScene = async ({
     crCameraRight.fov = 2
     crCameraRight.setTarget(new BABYLON.Vector3(1, 0, 0.6))
 
-
-
     const crCameraLeftPl = BABYLON.MeshBuilder.CreateSphere("crCameraLeftPl", {diameter: 0.1, segments: 32}, scene);
     crCameraLeftPl.parent = creature
     crCameraLeftPl.position = new BABYLON.Vector3(-0.5, 0, 0)
@@ -220,8 +216,6 @@ const createScene = async ({
         ball.material.backFaceCulling = false
     });
 
-    
-
     /* COLLISIONS DETECTION */
     const impostors = scene.getPhysicsEngine()._impostors.filter(im => im.object.id !== creature.id)
     creature.impostor.registerOnPhysicsCollide(impostors, (body1, body2) => {})
@@ -266,180 +260,171 @@ const createScene = async ({
   let prevLinearVelocity = BABYLON.Vector3.Zero();
 
   const frameStack = [];
+  const transitions = [];
 
   const worker = new Worker(new URL('./worker.ts', import.meta.url), {type: 'module'});
 
   void worker.addEventListener('message', e => {
-    const {weights, frame} = e.data;
+    const {weights/*, frame */} = e.data;
+    if (!weights) return;
 
     void tf.tidy(() => {
-      if (weights) {
-        inited = true
-        agent.actor.setWeights(weights.map(w => tf.tensor(w))) // timer ~30ms
-        if (Math.random() > 0.99) console.log('weights:', weights)
-      }
+      inited = true;
+      return void agent.actor.setWeights(weights.map(w => tf.tensor(w)));
     });
   });
 
+  const whileNotBusyWhenReady = (cb: Function) => async (...args) => {
+    if (busy || !inited) return;
+
+    try {
+      busy = true;
+      const res = await cb(...args);
+      busy = false;
+      return res;
+    } catch (e) {
+      busy = false;
+      throw e;
+    }
+  };
+
   const sceneToRender = await createScene({
     engine,
-    registerAfterRender: async ({
-      scene,
-      creature,
-      crCameraLeft,
-      crCameraRight,
-    }) => {
-      if (busy || !inited) return;
+    registerAfterRender: whileNotBusyWhenReady(
+      async ({
+        scene,
+        creature,
+        crCameraLeft,
+        crCameraRight,
+      }) => {
+        void frameStack.push(await Promise.all([
+          BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraLeft, {
+            height: agent._frameShape[0],
+            width: agent._frameShape[1],
+          }),
+          BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraRight, {
+            height: agent._frameShape[0],
+            width: agent._frameShape[1],
+          }),
+        ]));
 
-      try {
-        busy = true;
+        if (frameStack.length < agent._nFrames) return;
+        assert(frameStack.length === agent._nFrames);
 
-        if (!frameStack.length) {
-            frameStack.push([
-                await BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraLeft, { // ~ 7-60ms
-                    height: agent._frameShape[0],
-                    width: agent._frameShape[1]
-                })
-            ])
-        } else {
-            frameStack[0].push(
-                await BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraRight, { // ~ 7-60ms
-                    height: agent._frameShape[0],
-                    width: agent._frameShape[1]
-                })
-            )
-        }
+        const imgs = await Promise.all(frameStack.flat().map(base64ToImg))
 
-        if (frameStack.length >= agent._nFrames && frameStack[0].length == 2) { // ~20ms
-            if (frameStack.length > agent._nFrames)
-                throw new Error("(⊙＿⊙')")
+        const framesNorm = tf.tidy(() => {
+          const greyScaler = tf.tensor([0.299, 0.587, 0.114], [1, 1, 3]);
+          const imgTensors = imgs
+            .map(img => tf.browser.fromPixels(img))
+            .map((t, i) => {
+              const canv = document.getElementById('testCanvas' + (i+3))
+              if (canv) tf.browser.toPixels(t, canv);
 
-            const imgs = await Promise.all(frameStack.flat().map(fr => base64ToImg(fr)))
-
-            const framesNorm = tf.tidy(() => {
-                const greyScaler = tf.tensor([0.299, 0.587, 0.114], [1, 1, 3]);
-                const imgTensors = imgs
-                    .map(img => tf.browser.fromPixels(img))
-                    .map((t, i) => {
-                        const canv = document.getElementById('testCanvas' + (i+3))
-                        if (canv) tf.browser.toPixels(t, canv); // timer ~1ms
-                        return t.sub(255/2).div(255/2);
-                    });
-
-                const resL = tf.concat(imgTensors.filter((el, i) => i%2==0), -1)
-                const resR = tf.concat(imgTensors.filter((el, i) => i%2==1), -1)
-                return [resL, resR]
+              return t.sub(255/2).div(255/2);
             });
 
-            const framesBatch = framesNorm.map(fr => tf.stack([fr]))
+          const resL = tf.concat(imgTensors.filter((el, i) => i%2==0), -1)
+          const resR = tf.concat(imgTensors.filter((el, i) => i%2==1), -1)
+          return [resL, resR];
+        });
 
-            const delta = (Date.now() - timer) / 1000 // sec
-            console.log('delta (s)', delta)
-            const linearVelocity = creature.impostor.getLinearVelocity()
-            const linearVelocityNorm = linearVelocity.normalize()
-            const acceleration = linearVelocity.subtract(prevLinearVelocity).scale(1/delta).normalize()
+        const framesBatch = framesNorm.map(fr => tf.stack([fr]))
 
-            timer = Date.now()
-            prevLinearVelocity = linearVelocity
+        const delta = (Date.now() - timer) / 1000 // sec
+        console.log('delta (s)', delta)
+        const linearVelocity = creature.impostor.getLinearVelocity()
+        const linearVelocityNorm = linearVelocity.normalize()
+        const acceleration = linearVelocity.subtract(prevLinearVelocity).scale(1/delta).normalize()
 
-            const ray = new BABYLON.Ray(creature.position, linearVelocityNorm)
-            const hit = scene.pickWithRay(ray)
-            let lidar = 0
-            if (hit.pickedMesh) {
-                lidar = Math.tanh((hit.distance - creature.impostor.getRadius())/10) // stretch tanh by 10 for precision
-                // console.log('Hit: ', hit.pickedMesh.name, hit.distance, lidar, linearVelocity, collision)
-            }
+        timer = Date.now()
+        prevLinearVelocity = linearVelocity
 
-            const telemetry = [
-                linearVelocityNorm.x,
-                linearVelocityNorm.y,
-                linearVelocityNorm.z,
-                acceleration.x,
-                acceleration.y,
-                acceleration.z,
-                window.collision.x, 
-                window.collision.y, 
-                window.collision.z,
-                lidar
-            ];
-            const reward = window.reward
+        const ray = new BABYLON.Ray(creature.position, linearVelocityNorm)
+        const hit = scene.pickWithRay(ray)
 
-            window.collision = BABYLON.Vector3.Zero() // reset collision point
-            window.reward = -0.01
-            window.onCollide = undefined
-            const telemetryBatch = tf.tensor(telemetry, [1, agent._nTelemetry])
-            const action = agent.sampleAction([telemetryBatch, ...framesBatch]) // timer ~5ms
+        const lidar = hit.pickedMesh
+          ? Math.tanh((hit.distance - creature.impostor.getRadius()) / 10)
+          : 0;
 
-            // TODO: !!!!!await find the way to avoid framesNorm.array()
-            console.time('await')
-            const [framesArrL, framesArrR,[actionArr]] = await Promise.all([...(framesNorm.map(fr => fr.array())), action.array()]) // action come as a batch of size 1
-            console.timeEnd('await')
+        const telemetry = [
+          linearVelocityNorm.x,
+          linearVelocityNorm.y,
+          linearVelocityNorm.z,
+          acceleration.x,
+          acceleration.y,
+          acceleration.z,
+          window.collision.x, 
+          window.collision.y, 
+          window.collision.z,
+          lidar,
+        ];
 
-            const impulse = actionArr.slice(0, 3);
-            console.assert(actionArr.length === 3, actionArr.length)
-            console.assert(impulse.length === 3)
+        const reward = window.reward;
 
-            // [0,-1,0]
-            creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero()) // just in case, probably redundant
-            // creature.impostor.setLinearVelocity(BABYLON.Vector3.Zero()) // contact point zero
-            creature.impostor.applyImpulse(new BABYLON.Vector3(...impulse), creature.getAbsolutePosition()) // contact point zero
-            creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero())
-            // creature.glow.color2 = new BABYLON.Color4(...color)
-            
-            // after applyImpulse the linear velocity is recalculated right away
-            const newLinearVelocity = creature.impostor.getLinearVelocity().normalize() 
-            // creature.lookAt(new BABYLON.Vector3(0, -1, 0), 0, 0, 0, BABYLON.Space.LOCAL)
-            creature.lookAt(creature.position.add(newLinearVelocity))
-            //if (!window.rr) window.rr = 
-            // creature.lookAt(creature.position.add(new BABYLON.Vector3(0,1,0)))
+        window.collision = BABYLON.Vector3.Zero() // reset collision point
+        window.reward = -0.01
+        window.onCollide = undefined
+        const telemetryBatch = tf.tensor(telemetry, [1, agent._nTelemetry])
+        const action = agent.sampleAction([telemetryBatch, ...framesBatch]) // timer ~5ms
 
-            const transtion = {
-                id: stateId++, 
-                state: [telemetry, framesArrL, framesArrR], // 20ms vs 50ms || size 200kb vs 1.5mb
-                action: actionArr,
-                reward
-            };
-            transitions.push(transtion)
+        // TODO: !!!!!await find the way to avoid framesNorm.array()
+        console.time('await')
+        const [framesArrL, framesArrR,[actionArr]] = await Promise.all([...(framesNorm.map(fr => fr.array())), action.array()]) // action come as a batch of size 1
+        console.timeEnd('await')
 
-            window.onCollide = (collision, mesh) => {
-                window.collision = collision
-                window.reward += -0.05
+        const impulse = actionArr.slice(0, 3);
+        console.assert(actionArr.length === 3, actionArr.length)
+        console.assert(impulse.length === 3)
 
-                if (mesh.startsWith('ball_')) {
-                    console.log('reward', mesh)
-                    window.reward = 1
+        // [0,-1,0]
+        creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero()) // just in case, probably redundant
+        creature.impostor.applyImpulse(new BABYLON.Vector3(...impulse), creature.getAbsolutePosition()) // contact point zero
+        creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero())
+        
+        // after applyImpulse the linear velocity is recalculated right away
+        const newLinearVelocity = creature.impostor.getLinearVelocity().normalize() 
+        // creature.lookAt(new BABYLON.Vector3(0, -1, 0), 0, 0, 0, BABYLON.Space.LOCAL)
+        creature.lookAt(creature.position.add(newLinearVelocity))
+        //if (!window.rr) window.rr = 
+        // creature.lookAt(creature.position.add(new BABYLON.Vector3(0,1,0)))
 
-                    if (mesh.includes('red'))
-                        window.reward = -1
-                }
+        const transition = {
+          id: stateId++, 
+          state: [telemetry, framesArrL, framesArrR],
+          action: actionArr,
+          reward,
+        };
+        transitions.push(transition);
 
-                window.onCollide = undefined
-            }
+        window.onCollide = (collision, mesh) => {
+          window.collision = collision
+          window.reward += -0.05
 
-            if (transitions.length >= TRANSITIONS_BUFFER_SIZE) {
-                if (transitions.length > TRANSITIONS_BUFFER_SIZE || TRANSITIONS_BUFFER_SIZE < 2)
-                    throw new Error("(⊙＿⊙')")
+          if (mesh.startsWith('ball_')) {
+              console.log('reward', mesh)
+              window.reward = 1
 
-                const transition = transitions.shift()
-                console.log('reward', transition.reward);
-                
+              if (mesh.includes('red'))
+                  window.reward = -1
+          }
 
-                worker.postMessage({action: 'newTransition', transition}) // timer ~ 6ms
+          window.onCollide = undefined
+        };
 
-            }
-
-            framesNorm.map(fr => fr.dispose());
-            framesBatch.map(fr => fr.dispose());
-            telemetryBatch.dispose();
-            action.dispose();
-            frameStack.length = 0;
+        if (transitions.length === TRANSITIONS_BUFFER_SIZE) {
+          const transition = transitions.shift();
+          console.log('reward', transition.reward);
+          void worker.postMessage({action: 'newTransition', transition});
         }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        busy = false;
+
+        framesNorm.map(fr => fr.dispose());
+        framesBatch.map(fr => fr.dispose());
+        telemetryBatch.dispose();
+        action.dispose();
+        frameStack.length = 0;
       }
-    },
+    ),
   });
   
   return engine.runRenderLoop(() => {
