@@ -109,7 +109,7 @@ export class AgentSac {
       
     this.actor = await this._getActor(this._prefix + NAME.ACTOR, this._trainable);
       
-    if (!this._trainable) return;
+    if (!this._trainable) return void (this._inited = true);
       
     this.actorOptimizer = tf.train.adam();
 

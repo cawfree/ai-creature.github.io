@@ -20,9 +20,7 @@ root.render(<React.StrictMode />);
 // or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();
 
-const agent = new AgentSac({trainable: false, verbose: false})
-
-const canvas = document.getElementById("renderCanvas");
+const canvas = document.getElementById('renderCanvas');
 const createDefaultEngine = () => new BABYLON.Engine(canvas, true, {
     preserveDrawingBuffer: true, 
     stencil: true,
@@ -38,14 +36,14 @@ document.getElementById('dislike').addEventListener('click', () => {
 });
 
 window.transitions = []
-const BINOCULAR = true
 
 const createScene = async ({
+  agent,
   engine,
 }: {
+  readonly agent: AgentSac;
   readonly engine: BABYLON.Engine;
 }) => {
-    await agent.init()
 
     // This creates a basic Babylon Scene object (non-mesh)
     const scene = new BABYLON.Scene(engine);
@@ -430,7 +428,13 @@ const createScene = async ({
   const engine = createDefaultEngine();
   window.addEventListener('resize', () => void engine.resize());
 
-  const sceneToRender = await createScene({engine});
+  const agent = new AgentSac({trainable: false, verbose: false})
+  await agent.init();
+
+  const sceneToRender = await createScene({
+    agent,
+    engine,
+  });
   
   return engine.runRenderLoop(() => {
     if (!sceneToRender?.activeCamera) return;
