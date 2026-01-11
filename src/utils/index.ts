@@ -53,6 +53,44 @@ export const loadModelByName = async (
   return null;
 };
 
+export const createConvEncoder = (
+  inputs: tf.SymbolicTensor
+): tf.SymbolicTensor => {
+  const padding = 'valid'
+  const kernelInitializer = 'glorotNormal'
+  const biasInitializer = 'glorotNormal'
+
+  let outputs = tf.layers.conv2d({
+    filters: 16,
+    kernelSize: 5,
+    strides: 2,
+    padding,
+    kernelInitializer,
+    biasInitializer,
+    activation: 'relu',
+    trainable: true,
+  }).apply(inputs);
+
+  outputs = tf.layers.maxPooling2d({poolSize:2}).apply(outputs);
+
+  outputs = tf.layers.conv2d({
+    filters: 16,
+    kernelSize: 3,
+    strides: 1,
+    padding,
+    kernelInitializer,
+    biasInitializer,
+    activation: 'relu',
+    trainable: true,
+  }).apply(outputs);
+
+  outputs = tf.layers.maxPooling2d({poolSize:2}).apply(outputs);
+  outputs = tf.layers.flatten().apply(outputs);
+
+  assert(outputs instanceof tf.SymbolicTensor);
+  return outputs
+};
+
 export const createAgentSac = async ({
   agentSacProps,
 }: {

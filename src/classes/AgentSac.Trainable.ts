@@ -6,6 +6,7 @@ import {NAME} from '../constants';
 import {
   assertScalar,
   assertShape,
+  createConvEncoder,
   getTrainableOnlyWeights,
   loadModelByName,
   saveModel,
@@ -71,8 +72,8 @@ export class AgentSacTrainable extends AgentSac {
     let outputs = tf.layers.dense({ units: 256, activation: 'relu' }).apply(
       this._sighted
         ? tf.layers.concatenate().apply([
-            this._getConvEncoder(this._frameInputL!),
-            this._getConvEncoder(this._frameInputR!),
+            createConvEncoder(this._frameInputL!),
+            createConvEncoder(this._frameInputR!),
             base,
           ])
         : base

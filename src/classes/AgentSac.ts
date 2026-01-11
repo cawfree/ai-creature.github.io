@@ -10,7 +10,7 @@ import {
 } from '../constants';
 
 import {Initializable} from './Initializable';
-import {loadModelByName} from '../utils';
+import {createConvEncoder, loadModelByName} from '../utils';
 
 export class AgentSac extends Initializable {
 
@@ -193,8 +193,8 @@ export class AgentSac extends Initializable {
             let outputs = tf.layers.dense({ units: 256, activation: 'relu' }).apply(
               this._sighted
                 ? tf.layers.concatenate().apply([
-                  this._getConvEncoder(this._frameInputL!),
-                  this._getConvEncoder(this._frameInputR!),
+                  createConvEncoder(this._frameInputL!),
+                  createConvEncoder(this._frameInputR!),
                   this._telemetryInput!,
                 ])
                 : this._telemetryInput!
@@ -217,105 +217,6 @@ export class AgentSac extends Initializable {
             })
             return model;
         } 
-
-        // _encoder = null
-        // _getConvEncoder(inputs) {
-        //     if (!this._encoder)
-        //         this._encoder = this.__getConvEncoder(inputs)
-            
-        //     return this._encoder
-        // }
-
-        /**
-         * Builds convolutional part of a network.
-         * 
-         * @param {Tensor} inputs - input for the conv layers
-         * @returns outputs
-         */
-         _getConvEncoder(inputs: tf.SymbolicTensor): tf.SymbolicTensor {
-
-            const kernelSize = 3
-            const padding = 'valid'
-            const poolSize = 3
-            const strides = 1
-            // const depthwiseInitializer = 'heNormal'
-            // const pointwiseInitializer = 'heNormal'
-            const kernelInitializer = 'glorotNormal'
-            const biasInitializer = 'glorotNormal'
-
-            // 32x8x4 -> 64x4x2 -> 64x3x1 -> 64x4x1
-            let outputs = tf.layers.conv2d({
-                filters: 16,
-                kernelSize: 5,
-                strides: 2,
-                padding,
-                kernelInitializer,
-                biasInitializer,
-                activation: 'relu',
-                trainable: true
-            }).apply(inputs)
-            outputs = tf.layers.maxPooling2d({poolSize:2}).apply(outputs)
-            // 
-            // outputs = tf.layers.layerNormalization().apply(outputs)
-
-            outputs = tf.layers.conv2d({
-                filters: 16,
-                kernelSize: 3,
-                strides: 1,
-                padding,
-                kernelInitializer,
-                biasInitializer,
-                activation: 'relu',
-                trainable: true
-            }).apply(outputs)
-            outputs = tf.layers.maxPooling2d({poolSize:2}).apply(outputs)
-
-            // outputs = tf.layers.layerNormalization().apply(outputs)
-            
-            // outputs = tf.layers.conv2d({
-            //     filters: 12,
-            //     kernelSize: 3,
-            //     strides: 1,
-            //     padding,
-            //     kernelInitializer,
-            //     biasInitializer,
-            //     activation: 'relu',
-            //     trainable: true
-            // }).apply(outputs)
-
-            // outputs = tf.layers.conv2d({
-            //     filters: 10,
-            //     kernelSize: 2,
-            //     strides: 1,
-            //     padding,
-            //     kernelInitializer,
-            //     biasInitializer,
-            //     activation: 'relu',
-            //     trainable: true
-            // }).apply(outputs)
-
-            // outputs = tf.layers.conv2d({
-            //     filters: 64,
-            //     kernelSize: 4,
-            //     strides: 1,
-            //     padding,
-            //     kernelInitializer,
-            //     biasInitializer,
-            //     activation: 'relu'
-            // }).apply(outputs)
-
-            // outputs = tf.layers.batchNormalization().apply(outputs)
-
-            // outputs = tf.layers.layerNormalization().apply(outputs)
-
-            outputs = tf.layers.flatten().apply(outputs)
-
-            // convOutputs = tf.layers.dense({units: 96, activation: 'relu'}).apply(convOutputs)
-
-             console.log('here with the shit');
-            assert(outputs instanceof tf.SymbolicTensor);
-            return outputs
-        }
 
         /**
          * Builds a log of entropy scale (α) for training.
