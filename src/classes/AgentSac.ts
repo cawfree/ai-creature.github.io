@@ -37,9 +37,6 @@ export class AgentSac extends Initializable {
   /* actor */
   actor?: tf.LayersModel; 
 
-  // TODO: idk.
-  _logAlphaPlaceholder?: tf.LayersModel;
-
   constructor({
     batchSize = 1, 
     frameShape = [25, 25, 3], 
@@ -363,13 +360,10 @@ export class AgentSac extends Initializable {
                 if (this._verbose)
                     console.log('Checkpoint alpha: ', logAlpha)
                     
-                this._logAlphaPlaceholder = checkpoint
             } else {
                 const model = tf.sequential({ name });
                 model.add(tf.layers.dense({ units: 1, inputShape: [1], useBias: false }))
                 model.setWeights([tf.tensor([logAlpha], [1, 1])])
-
-                this._logAlphaPlaceholder = model
             }
 
             return tf.variable(tf.scalar(logAlpha), true) // true -> trainable

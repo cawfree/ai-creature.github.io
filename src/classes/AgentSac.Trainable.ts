@@ -278,15 +278,12 @@ export class AgentSacTrainable extends AgentSac {
   }
 
   async checkpoint() {
-    this._logAlphaPlaceholder!.setWeights([tf.tensor([this._logAlpha!.arraySync()], [1, 1])]);
-
     await Promise.all([
       this._saveCheckpoint(this.actor!),
       this._saveCheckpoint(this.q1!),
       this._saveCheckpoint(this.q2!),
       this._saveCheckpoint(this.q1Targ!),
       this._saveCheckpoint(this.q2Targ!),
-      this._saveCheckpoint(this._logAlphaPlaceholder!)
     ]);
 
     if (this._verbose) console.log('Checkpoint successfully saved!');
