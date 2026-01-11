@@ -12,7 +12,7 @@ export abstract class Initializable {
     assert(!this.#initialized);
   }
 
-  isInitialized(): boolean {
+  initialized(): boolean {
     return this.#initialized;
   }
 
