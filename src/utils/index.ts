@@ -56,9 +56,9 @@ export const loadModelByName = async (
 export const createConvEncoder = (
   inputs: tf.SymbolicTensor
 ): tf.SymbolicTensor => {
-  const padding = 'valid'
-  const kernelInitializer = 'glorotNormal'
-  const biasInitializer = 'glorotNormal'
+  const padding = 'valid';
+  const kernelInitializer = 'glorotNormal';
+  const biasInitializer = 'glorotNormal';
 
   let outputs = tf.layers.conv2d({
     filters: 16,
@@ -88,7 +88,7 @@ export const createConvEncoder = (
   outputs = tf.layers.flatten().apply(outputs);
 
   assert(outputs instanceof tf.SymbolicTensor);
-  return outputs
+  return outputs;
 };
 
 export const createAgentSac = async ({
