@@ -212,16 +212,14 @@ const createScene = async ({
     const frameEvery = 1000/30 // ~33ms ~24frames/sec
 
     window.collision = BABYLON.Vector3.Zero()
-    window.reward = 0
+    window.reward = 0 
 
-    void scene.registerAfterRender(() => registerAfterRender({
-      scene,
+    return {
       creature,
       crCameraLeft,
       crCameraRight,
-    }));
-
-    return scene
+      scene,
+    };
 };
 
 export const createCreatureEngine = async ({
@@ -250,7 +248,6 @@ export const createCreatureEngine = async ({
   const frameStack = [];
 
   const registerAfterRender = async ({
-    scene,
     creature,
     crCameraLeft,
     crCameraRight,
@@ -380,14 +377,18 @@ export const createCreatureEngine = async ({
     frameStack.length = 0;
   };
 
-  const sceneToRender = await createScene({
+  const {scene, ...extras} = await createScene({
     engine,
     registerAfterRender:
       whileNotBusyWhenReady(registerAfterRender),
   });
+
+  void scene.registerAfterRender(
+    whileNotBusyWhenReady(() => registerAfterRender(extras)),
+  );
   
   return engine.runRenderLoop(() => {
-    if (!sceneToRender?.activeCamera) return;
-    return sceneToRender.render();
+    if (!scene?.activeCamera) return;
+    return scene.render();
   });
 };
