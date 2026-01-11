@@ -38,7 +38,10 @@ export const getTrainableOnlyWeights = (layersModel: tf.LayersModel) =>
       return w;
     });
 
-const getModelKey = (modelName: string) => `indexeddb://${modelName}-${VERSION}`;
+const getModelKey = (modelName: string) => {
+  assert(typeof modelName === 'string' && modelName.length);
+  return `indexeddb://${modelName}-${VERSION}`;
+};
 
 export const saveModel = (
   model: tf.LayersModel
@@ -89,6 +92,45 @@ export const createConvEncoder = (
 
   assert(outputs instanceof tf.SymbolicTensor);
   return outputs;
+};
+
+export const createActor = async ({
+  frameInputL,
+  frameInputR,
+  nActions,
+  name,
+  sighted,
+  telemetryInput,
+}: {
+  readonly frameInputL: tf.SymbolicTensor;
+  readonly frameInputR: tf.SymbolicTensor;
+  readonly nActions: number;
+  readonly name: string;
+  readonly sighted: boolean;
+  readonly telemetryInput: tf.SymbolicTensor;
+}) => {
+  let outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(
+    sighted
+      ? tf.layers.concatenate().apply([
+          createConvEncoder(frameInputL), createConvEncoder(frameInputR), telemetryInput,
+        ])
+      : telemetryInput
+  );
+
+  outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs);
+
+  const mu = tf.layers.dense({units: nActions}).apply(outputs);
+  const logStd = tf.layers.dense({units: nActions}).apply(outputs);
+
+  assert(mu instanceof tf.SymbolicTensor && logStd instanceof tf.SymbolicTensor);
+
+  return tf.model({
+    inputs: sighted
+      ? [telemetryInput, frameInputL, frameInputR]
+      : [telemetryInput],
+      outputs: [mu, logStd],
+      name,
+  });
 };
 
 export const createAgentSac = async ({

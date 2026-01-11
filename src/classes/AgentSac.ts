@@ -10,7 +10,7 @@ import {
 } from '../constants';
 
 import {Initializable} from './Initializable';
-import {createConvEncoder, loadModelByName} from '../utils';
+import {createActor, createConvEncoder, loadModelByName} from '../utils';
 
 export class AgentSac extends Initializable {
 
@@ -187,69 +187,18 @@ export class AgentSac extends Initializable {
          * @returns {tf.LayersModel} model
          */
         async _getActor(name = 'actor'): Promise<tf.LayersModel> {
-            const checkpoint = await loadModelByName(name);
-            if (checkpoint) return checkpoint;
+          const checkpoint = await loadModelByName(name);
+          if (checkpoint) return checkpoint;
 
-            let outputs = tf.layers.dense({ units: 256, activation: 'relu' }).apply(
-              this._sighted
-                ? tf.layers.concatenate().apply([
-                  createConvEncoder(this._frameInputL!),
-                  createConvEncoder(this._frameInputR!),
-                  this._telemetryInput!,
-                ])
-                : this._telemetryInput!
-            );
-
-            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
-
-            const mu     = tf.layers.dense({units: this._nActions}).apply(outputs)
-            const logStd = tf.layers.dense({units: this._nActions}).apply(outputs)
-
-            assert(mu instanceof tf.SymbolicTensor && logStd instanceof tf.SymbolicTensor);
-
-            const model = tf.model({
-                inputs:
-                    this._sighted
-                        ? [this._telemetryInput!, this._frameInputL!, this._frameInputR!]
-                        : [this._telemetryInput!],
-                outputs: [mu, logStd],
-                name,
-            })
-            return model;
-        } 
-
-        /**
-         * Builds a log of entropy scale (α) for training.
-         * 
-         * @param {string} name 
-         * @returns {tf.Variable} trainable variable for log entropy
-         */
-        async _getLogAlpha(name = 'alpha') {
-            let logAlpha = 0.0
-
-            const checkpoint = await loadModelByName(name);
-            if (checkpoint) {
-                const [weights] = checkpoint.getWeights();
-                assert(weights);
-
-                const arraySync = weights.arraySync();
-                assert(Array.isArray(arraySync));
-
-                const [children] = arraySync;
-                assert(Array.isArray(children));
-
-                const [child] = children;
-                assert(typeof child === 'number');
-
-                logAlpha = child;
-            } else {
-                const model = tf.sequential({ name });
-                model.add(tf.layers.dense({ units: 1, inputShape: [1], useBias: false }))
-                model.setWeights([tf.tensor([logAlpha], [1, 1])])
-            }
-
-            return tf.variable(tf.scalar(logAlpha), true) // true -> trainable
-        } 
+          return createActor({
+            frameInputL: this._frameInputL!,
+            frameInputR: this._frameInputR!,
+            nActions: this._nActions,
+            name,
+            sighted: this._sighted,
+            telemetryInput: this._telemetryInput!,
+          });
+        }
 
         /**
          * Saves a model to the storage.

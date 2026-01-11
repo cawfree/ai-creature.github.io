@@ -275,4 +275,37 @@ export class AgentSacTrainable extends AgentSac {
     ]);
   }
 
+/**
+         * Builds a log of entropy scale (α) for training.
+         * 
+         * @param {string} name 
+         * @returns {tf.Variable} trainable variable for log entropy
+         */
+        async _getLogAlpha(name = 'alpha') {
+            let logAlpha = 0.0
+
+            const checkpoint = await loadModelByName(name);
+            if (checkpoint) {
+                const [weights] = checkpoint.getWeights();
+                assert(weights);
+
+                const arraySync = weights.arraySync();
+                assert(Array.isArray(arraySync));
+
+                const [children] = arraySync;
+                assert(Array.isArray(children));
+
+                const [child] = children;
+                assert(typeof child === 'number');
+
+                logAlpha = child;
+            } else {
+                const model = tf.sequential({ name });
+                model.add(tf.layers.dense({ units: 1, inputShape: [1], useBias: false }))
+                model.setWeights([tf.tensor([logAlpha], [1, 1])])
+            }
+
+            return tf.variable(tf.scalar(logAlpha), true) // true -> trainable
+        }
+
 }
