@@ -43,7 +43,7 @@ export const createAgentSac = async ({
   readonly agentSacProps?: Partial<AgentSacConstructorProps>;
 } = Object.create(null)) => {
   const agent = new AgentSac(agentSacProps);
-  await agent.init();
+  await agent.initialize();
   return {agent};
 };
 
@@ -53,7 +53,7 @@ export const createAgentSacTrainable = async ({
   readonly agentSacProps?: Partial<AgentSacConstructorProps>;
 } = Object.create(null)) => {
   const agent = new AgentSacTrainable(agentSacProps);
-  await agent.init();
+  await agent.initialize();
   await agent.checkpoint();
   return {agent};
 };

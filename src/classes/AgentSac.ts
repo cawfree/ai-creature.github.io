@@ -10,7 +10,9 @@ import {
   VERSION,
 } from '../constants';
 
-export class AgentSac {
+import {Initializable} from './Initializable';
+
+export class AgentSac extends Initializable {
 
   /* constructor */
   _batchSize: number;
@@ -22,7 +24,6 @@ export class AgentSac {
   _tau: number;
   //_trainable: boolean;
   _verbose: boolean;
-  _inited: boolean;
   _prefix: string;
   _forced: boolean;
   _sighted: boolean;
@@ -56,6 +57,7 @@ export class AgentSac {
     sighted = true,
     rewardScale = 10
   }: Partial<AgentSacConstructorProps> = Object.create(null)) {
+    super();
     this._batchSize = batchSize;
     this._frameShape = frameShape;
     this._nFrames = nFrames;
@@ -64,7 +66,6 @@ export class AgentSac {
     this._gamma = gamma;
     this._tau = tau;
     this._verbose = verbose;
-    this._inited = false;
     this._prefix = (prefix === '' ? '' : prefix + '-');
     this._forced = forced;
     this._sighted = sighted;
@@ -74,9 +75,8 @@ export class AgentSac {
     this._targetEntropy = -nActions;
   }
 
-  async init() {
-    if (this._inited) throw Error('щ（ﾟДﾟщ）');
-    this._inited = true;
+  async initialize() {
+    await super.initialize();
 
     this._frameInputL = tf.input({batchShape : [null, ...this._frameStackShape]});
     this._frameInputR = tf.input({batchShape : [null, ...this._frameStackShape]});

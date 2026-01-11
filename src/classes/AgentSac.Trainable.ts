@@ -31,8 +31,8 @@ export class AgentSacTrainable extends AgentSac {
     super(props);
   }
 
-  async init() {
-    await super.init();
+  async initialize() {
+    await super.initialize();
       
     this.actorOptimizer = tf.train.adam();
 
