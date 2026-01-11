@@ -3,13 +3,18 @@ import assert from 'minimalistic-assert';
 
 import {Transition} from './@types';
 import {AgentSac, ReplyBuffer} from './classes';
-import {assertNumericArray} from './utils';
+import {assertNumericArray, createAgentSac} from './utils';
 
 void (async () => {
     const DISABLED = false
 
-    const agent = new AgentSac({batchSize: 100, verbose: true})
-    await agent.init()
+    const {agent} = await createAgentSac({
+      agentSacProps: {
+        batchSize: 100,
+        verbose: true,
+      },
+    });
+
     await agent.checkpoint() // overwrite
 
     const actor = agent.actor;

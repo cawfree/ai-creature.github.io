@@ -9,6 +9,7 @@ import reportWebVitals from './reportWebVitals';
 import {Transition} from './@types';
 import {AgentSac} from './classes'
 import {creature} from './examples';
+import { createAgentSac } from './utils';
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
@@ -21,8 +22,12 @@ root.render(<React.StrictMode />);
 reportWebVitals();
 
 (async () => { 
-  const agent = new AgentSac({trainable: false, verbose: false})
-  await agent.init();
+  const {agent} = await createAgentSac({
+    agentSacProps: {
+      trainable: false,
+      verbose: false,
+    },
+  });
 
   const worker = new Worker(new URL('./worker.ts', import.meta.url), {type: 'module'});
 
