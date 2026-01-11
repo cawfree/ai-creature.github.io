@@ -6,7 +6,7 @@ import {NAME} from '../constants';
 import {
   assertScalar,
   assertShape,
-  createConvEncoder,
+  createCritic,
   getTrainableOnlyWeights,
   loadModelByName,
   saveModel,
@@ -66,34 +66,14 @@ export class AgentSacTrainable extends AgentSac {
     const checkpoint = await loadModelByName(name);
     if (checkpoint) return checkpoint
 
-    const base = tf.layers.concatenate().apply([this._telemetryInput!, this._actionInput!])
-    assert(base instanceof tf.SymbolicTensor);
-
-    let outputs = tf.layers.dense({ units: 256, activation: 'relu' }).apply(
-      this._sighted
-        ? tf.layers.concatenate().apply([
-            createConvEncoder(this._frameInputL!),
-            createConvEncoder(this._frameInputR!),
-            base,
-          ])
-        : base
-    );
-
-    outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs);
-    outputs = tf.layers.dense({units: 1}).apply(outputs);
-
-    assert(outputs instanceof tf.SymbolicTensor);
-
-    const model = tf.model({
-      inputs: this._sighted 
-        ? [this._telemetryInput!, this._frameInputL!, this._frameInputR!, this._actionInput!] 
-        : [this._telemetryInput!, this._actionInput!],
-      outputs,
+    return createCritic({
+      actionInput: this._actionInput!,
+      frameInputL: this._frameInputL!,
+      frameInputR: this._frameInputR!,
       name,
-    })
-
-    model.trainable = true;
-    return model
+      sighted: this._sighted,
+      telemetryInput: this._telemetryInput!,
+    });
   }
 
   train({

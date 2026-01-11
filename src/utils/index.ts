@@ -56,9 +56,7 @@ export const loadModelByName = async (
   return null;
 };
 
-export const createConvEncoder = (
-  inputs: tf.SymbolicTensor
-): tf.SymbolicTensor => {
+const createConvEncoder = (inputs: tf.SymbolicTensor): tf.SymbolicTensor => {
   const padding = 'valid';
   const kernelInitializer = 'glorotNormal';
   const biasInitializer = 'glorotNormal';
@@ -112,7 +110,9 @@ export const createActor = async ({
   let outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(
     sighted
       ? tf.layers.concatenate().apply([
-          createConvEncoder(frameInputL), createConvEncoder(frameInputR), telemetryInput,
+          createConvEncoder(frameInputL),
+          createConvEncoder(frameInputR),
+          telemetryInput,
         ])
       : telemetryInput
   );
@@ -131,6 +131,51 @@ export const createActor = async ({
       outputs: [mu, logStd],
       name,
   });
+};
+
+export const createCritic = async ({
+  actionInput,
+  frameInputL,
+  frameInputR,
+  name,
+  sighted,
+  telemetryInput,
+}: {
+  readonly actionInput: tf.SymbolicTensor;
+  readonly frameInputL: tf.SymbolicTensor;
+  readonly frameInputR: tf.SymbolicTensor;
+  readonly name: string;
+  readonly sighted: boolean;
+  readonly telemetryInput: tf.SymbolicTensor;
+}): Promise<tf.LayersModel> => {
+  const base = tf.layers.concatenate().apply([telemetryInput, actionInput]);
+  assert(base instanceof tf.SymbolicTensor);
+
+  let outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(
+    sighted
+      ? tf.layers.concatenate().apply([
+          createConvEncoder(frameInputL),
+          createConvEncoder(frameInputR),
+          base,
+        ])
+      : base
+  );
+
+  outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs);
+  outputs = tf.layers.dense({units: 1}).apply(outputs);
+
+  assert(outputs instanceof tf.SymbolicTensor);
+
+  const model = tf.model({
+    inputs: sighted 
+      ? [telemetryInput, frameInputL, frameInputR, actionInput] 
+      : [telemetryInput, actionInput],
+    outputs,
+    name,
+  });
+
+  model.trainable = true;
+  return model;
 };
 
 const createAgentSacInstanceProps = async ({
