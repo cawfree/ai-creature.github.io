@@ -22,12 +22,7 @@ root.render(<React.StrictMode />);
 reportWebVitals();
 
 (async () => { 
-  const {agent} = await createAgentSac({
-    agentSacProps: {
-      trainable: false,
-      verbose: false,
-    },
-  });
+  const {agent} = await createAgentSac();
 
   const worker = new Worker(new URL('./worker.ts', import.meta.url), {type: 'module'});
 

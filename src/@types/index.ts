@@ -24,7 +24,7 @@ export type AgentSacProps = {
   // Target smoothing coefficient (τ)
   readonly tau: number;
   // Whether the actor is trainable
-  readonly trainable: boolean;
+  //readonly trainable: boolean;
   readonly verbose: boolean;
   // force to create fresh models (not from checkpoint)
   readonly forced: boolean;

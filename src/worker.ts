@@ -2,20 +2,21 @@ import * as tf from '@tensorflow/tfjs';
 import assert from 'minimalistic-assert';
 
 import {Transition} from './@types';
-import {AgentSac, ReplyBuffer} from './classes';
-import {assertNumericArray, createAgentSac} from './utils';
+import {ReplyBuffer} from './classes';
+import {
+  assertNumericArray,
+  createAgentSacTrainable,
+} from './utils';
 
 void (async () => {
     const DISABLED = false
 
-    const {agent} = await createAgentSac({
+    const {agent} = await createAgentSacTrainable({
       agentSacProps: {
         batchSize: 100,
         verbose: true,
       },
     });
-
-    await agent.checkpoint() // overwrite
 
     const actor = agent.actor;
     assert(actor);
