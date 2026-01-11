@@ -10,7 +10,7 @@ export type Transition = {
   readonly reward: tf.Tensor;
 };
 
-export type AgentSacProps = {
+export type AgentSacConstructorProps = {
   readonly batchSize: number;
   readonly frameShape: readonly number[];
   // Number of stacked frames per state

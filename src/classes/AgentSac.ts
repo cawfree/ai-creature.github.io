@@ -1,7 +1,7 @@
 import assert from 'minimalistic-assert';
 import * as tf from '@tensorflow/tfjs';
 
-import {AgentSacProps} from '../@types';
+import {AgentSacConstructorProps} from '../@types';
 import {
   EPSILON,
   LOG_STD_MAX,
@@ -55,7 +55,7 @@ export class AgentSac {
     prefix = '', // for tests,
     sighted = true,
     rewardScale = 10
-  }: Partial<AgentSacProps> = Object.create(null)) {
+  }: Partial<AgentSacConstructorProps> = Object.create(null)) {
     this._batchSize = batchSize;
     this._frameShape = frameShape;
     this._nFrames = nFrames;

@@ -1,11 +1,15 @@
 import assert from 'minimalistic-assert';
 import * as tf from '@tensorflow/tfjs';
 
-import {AgentSacProps, Transition} from '../@types';
+import {AgentSacConstructorProps, Transition} from '../@types';
 import {NAME} from '../constants';
+import {
+  assertScalar,
+  assertShape,
+  getTrainableOnlyWeights,
+} from '../utils';
 
 import {AgentSac} from './AgentSac';
-import { assertScalar, assertShape, getTrainableOnlyWeights } from '../utils';
 
 export class AgentSacTrainable extends AgentSac {
 
@@ -23,7 +27,7 @@ export class AgentSacTrainable extends AgentSac {
   _logAlpha?: tf.Variable<tf.Rank.R0>;
   alphaOptimizer?: tf.Optimizer;
 
-  constructor(props: Partial<AgentSacProps> = Object.create(null)) {
+  constructor(props: Partial<AgentSacConstructorProps> = Object.create(null)) {
     super(props);
   }
 
