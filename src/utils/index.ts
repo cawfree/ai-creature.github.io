@@ -251,9 +251,21 @@ export const createAgentSac = async ({
   return {agent};
 };
 
+const createLogAlpha = ({
+  logAlphaName,
+}: {
+  readonly logAlphaName: string;
+}) => {
+  const model = tf.sequential({name: logAlphaName});
+  model.add(tf.layers.dense({units: 1, inputShape: [1], useBias: false}));
+  model.setWeights([tf.tensor([0.0], [1, 1])]);
+  return model;
+};
+
 export const createAgentSacTrainableInstanceProps = async ({ 
   actorName,
   agentSacProps,
+  logAlphaName,
   q1Name,
   q1TargetName,
   q2Name,
@@ -261,6 +273,7 @@ export const createAgentSacTrainableInstanceProps = async ({
 }: {
   readonly actorName: string;
   readonly agentSacProps: Partial<AgentSacConstructorProps>;
+  readonly logAlphaName: string;
   readonly q1Name: string;
   readonly q1TargetName: string;
   readonly q2Name: string;
@@ -302,12 +315,16 @@ export const createAgentSacTrainableInstanceProps = async ({
     q1Targ,
     q2,
     q2Targ,
+    maybeLogAlpha,
   ] = await Promise.all([
     createCriticByName(q1Name),
     createCriticByName(q1TargetName),
     createCriticByName(q2Name),
     createCriticByName(q2TargetName),
+    loadModelByName(logAlphaName),
   ]);
+
+  const logAlphaModel = maybeLogAlpha || createLogAlpha({logAlphaName});
 
   const q1Optimizer = tf.train.adam();
   const q2Optimizer = tf.train.adam();
@@ -324,13 +341,15 @@ export const createAgentSacTrainableInstanceProps = async ({
     q2,
     q2Targ,
     q2Optimizer,
+    logAlphaModel,
   };
 };
 
 export const createAgentSacTrainable = async ({
-  // TODO: force specify name
+  // TODO: force specify names
   actorName = NAME.ACTOR,
   agentSacProps = Object.create(null),
+  logAlphaName = NAME.ALPHA,
   q1Name = NAME.Q1,
   q1TargetName = NAME.Q1_TARGET,
   q2Name = NAME.Q2,
@@ -338,6 +357,7 @@ export const createAgentSacTrainable = async ({
 }: {
   readonly actorName?: string;
   readonly agentSacProps?: Partial<AgentSacConstructorProps>;
+  readonly logAlphaName?: string;
   readonly q1Name?: string;
   readonly q1TargetName?: string;
   readonly q2Name?: string;
@@ -347,6 +367,7 @@ export const createAgentSacTrainable = async ({
     await createAgentSacTrainableInstanceProps({
       actorName,
       agentSacProps,
+      logAlphaName,
       q1Name,
       q1TargetName,
       q2Name,
@@ -358,4 +379,20 @@ export const createAgentSacTrainable = async ({
   await agent.initialize();
   await agent.checkpoint();
   return {agent};
+};
+
+export const getLogAlphaByModel = (model: tf.LayersModel): tf.Variable<tf.Rank.R0> => {
+  const [weights] = model.getWeights();
+  assert(weights);
+
+  const arraySync = weights.arraySync();
+  assert(Array.isArray(arraySync));
+
+  const [children] = arraySync;
+  assert(Array.isArray(children));
+
+  const [child] = children;
+  assert(typeof child === 'number');
+
+  return tf.variable(tf.scalar(child), true /* trainable */);
 };

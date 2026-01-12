@@ -2,12 +2,11 @@ import assert from 'minimalistic-assert';
 import * as tf from '@tensorflow/tfjs';
 
 import {AgentSacTrainableInstanceProps, Transition} from '../@types';
-import {NAME} from '../constants';
 import {
   assertScalar,
   assertShape,
+  getLogAlphaByModel,
   getTrainableOnlyWeights,
-  loadModelByName,
   saveModel,
 } from '../utils';
 
@@ -28,8 +27,8 @@ export class AgentSacTrainable extends AgentSac {
 
   alphaOptimizer: tf.Optimizer;
 
-  // TODO: how to reconcile usage?
-  _logAlpha?: tf.Variable<tf.Rank.R0>;
+  logAlphaModel: tf.LayersModel;
+  logAlpha: tf.Variable<tf.Rank.R0>;
 
   constructor(props: AgentSacTrainableInstanceProps) {
     super(props);
@@ -42,11 +41,12 @@ export class AgentSacTrainable extends AgentSac {
     this.q2Optimizer = props.q2Optimizer;
     this.q2Targ = props.q2Targ;
     this.alphaOptimizer = props.alphaOptimizer;
+    this.logAlphaModel = props.logAlphaModel;
+    this.logAlpha = getLogAlphaByModel(this.logAlphaModel);
   }
 
   async initialize() {
     await super.initialize();
-    this._logAlpha = await this._getLogAlpha(NAME.ALPHA);
     this.updateTargets(1);
   }
 
@@ -185,7 +185,7 @@ export class AgentSacTrainable extends AgentSac {
           return tf.mean(loss);
       }
       
-      const { value, grads } = tf.variableGrads(alphaLossFunction, [this._logAlpha!]) // true means trainableOnly
+      const {grads} = tf.variableGrads(alphaLossFunction, [this.logAlpha]) // true means trainableOnly
       
       this.alphaOptimizer!.applyGradients(grads)
   }
@@ -216,11 +216,16 @@ export class AgentSacTrainable extends AgentSac {
   }
 
   _getAlpha() {
-    return tf.exp(this._logAlpha!);
+    return tf.exp(this.logAlpha);
   }
 
   async checkpoint() {
+    void this.logAlphaModel.setWeights([
+      tf.tensor([this.logAlpha.arraySync()], [1, 1]),
+    ]);
+
     await Promise.all([
+      saveModel(this.logAlphaModel),
       saveModel(this.actor!),
       saveModel(this.q1!),
       saveModel(this.q2!),
@@ -228,38 +233,5 @@ export class AgentSacTrainable extends AgentSac {
       saveModel(this.q2Targ!),
     ]);
   }
-
-/**
-         * Builds a log of entropy scale (α) for training.
-         * 
-         * @param {string} name 
-         * @returns {tf.Variable} trainable variable for log entropy
-         */
-        async _getLogAlpha(name = 'alpha') {
-            let logAlpha = 0.0
-
-            const checkpoint = await loadModelByName(name);
-            if (checkpoint) {
-                const [weights] = checkpoint.getWeights();
-                assert(weights);
-
-                const arraySync = weights.arraySync();
-                assert(Array.isArray(arraySync));
-
-                const [children] = arraySync;
-                assert(Array.isArray(children));
-
-                const [child] = children;
-                assert(typeof child === 'number');
-
-                logAlpha = child;
-            } else {
-                const model = tf.sequential({ name });
-                model.add(tf.layers.dense({ units: 1, inputShape: [1], useBias: false }))
-                model.setWeights([tf.tensor([logAlpha], [1, 1])])
-            }
-
-            return tf.variable(tf.scalar(logAlpha), true) // true -> trainable
-        }
 
 }
