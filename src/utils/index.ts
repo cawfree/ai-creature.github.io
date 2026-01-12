@@ -2,7 +2,7 @@ import * as tf from '@tensorflow/tfjs';
 import assert from 'minimalistic-assert';
 import isEqual from 'react-fast-compare';
 
-import {AgentSacConstructorProps, AgentSacInstanceProps} from '../@types';
+import {AgentSacConstructorProps, AgentSacInstanceProps, AgentSacTrainableInstanceProps} from '../@types';
 import {AgentSac, AgentSacTrainable} from '../classes';
 import {NAME, VERSION} from '../constants';
 
@@ -244,23 +244,117 @@ export const createAgentSac = async ({
 } = Object.create(null)) => {
   const agentSacInstanceProps =
     await createAgentSacInstanceProps({actorName, agentSacProps});
+
   const agent = new AgentSac(agentSacInstanceProps);
   // TODO: remove `Initializable`.
   await agent.initialize();
   return {agent};
 };
 
+export const createAgentSacTrainableInstanceProps = async ({ 
+  actorName,
+  agentSacProps,
+  q1Name,
+  q1TargetName,
+  q2Name,
+  q2TargetName,
+}: {
+  readonly actorName: string;
+  readonly agentSacProps: Partial<AgentSacConstructorProps>;
+  readonly q1Name: string;
+  readonly q1TargetName: string;
+  readonly q2Name: string;
+  readonly q2TargetName: string;
+}): Promise<AgentSacTrainableInstanceProps> => {
+  const agentSacInstanceProps =
+    await createAgentSacInstanceProps({actorName, agentSacProps});
+  
+  const {
+    actor,
+    frameInputL,
+    frameInputR,
+    nActions,
+    sighted,
+    telemetryInput,
+  } = agentSacInstanceProps;
+
+  actor.trainable = true;
+
+  const actorOptimizer = tf.train.adam();
+  const actionInput = tf.input({batchShape: [null, nActions]});
+
+  const createCriticByName = async (criticName: string) => {
+    const maybeCritic = await loadModelByName(criticName);
+    if (maybeCritic) return maybeCritic;
+
+    return createCritic({
+      actionInput,
+      frameInputL,
+      frameInputR,
+      name: criticName,
+      sighted,
+      telemetryInput,
+    });
+  };
+
+  const [
+    q1,
+    q1Targ,
+    q2,
+    q2Targ,
+  ] = await Promise.all([
+    createCriticByName(q1Name),
+    createCriticByName(q1TargetName),
+    createCriticByName(q2Name),
+    createCriticByName(q2TargetName),
+  ]);
+
+  const q1Optimizer = tf.train.adam();
+  const q2Optimizer = tf.train.adam();
+  const alphaOptimizer = tf.train.adam();
+
+  return {
+    ...agentSacInstanceProps,
+    actorOptimizer,
+    actionInput,
+    alphaOptimizer,
+    q1,
+    q1Targ,
+    q1Optimizer,
+    q2,
+    q2Targ,
+    q2Optimizer,
+  };
+};
+
 export const createAgentSacTrainable = async ({
   // TODO: force specify name
   actorName = NAME.ACTOR,
   agentSacProps = Object.create(null),
+  q1Name = NAME.Q1,
+  q1TargetName = NAME.Q1_TARGET,
+  q2Name = NAME.Q2,
+  q2TargetName = NAME.Q2_TARGET,
 }: {
   readonly actorName?: string;
   readonly agentSacProps?: Partial<AgentSacConstructorProps>;
+  readonly q1Name?: string;
+  readonly q1TargetName?: string;
+  readonly q2Name?: string;
+  readonly q2TargetName?: string;
 } = Object.create(null)) => {
-  const agentSacInstanceProps =
-    await createAgentSacInstanceProps({actorName, agentSacProps});
-  const agent = new AgentSacTrainable(agentSacInstanceProps);
+  const agentSacTrainableInstanceProps =
+    await createAgentSacTrainableInstanceProps({
+      actorName,
+      agentSacProps,
+      q1Name,
+      q1TargetName,
+      q2Name,
+      q2TargetName,
+    });
+
+  const agent = new AgentSacTrainable(agentSacTrainableInstanceProps);
+
   await agent.initialize();
   await agent.checkpoint();
   return {agent};

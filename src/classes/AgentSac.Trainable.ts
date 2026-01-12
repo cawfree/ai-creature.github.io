@@ -1,12 +1,11 @@
 import assert from 'minimalistic-assert';
 import * as tf from '@tensorflow/tfjs';
 
-import {AgentSacInstanceProps, Transition} from '../@types';
+import {AgentSacTrainableInstanceProps, Transition} from '../@types';
 import {NAME} from '../constants';
 import {
   assertScalar,
   assertShape,
-  createCritic,
   getTrainableOnlyWeights,
   loadModelByName,
   saveModel,
@@ -16,64 +15,39 @@ import {AgentSac} from './AgentSac';
 
 export class AgentSacTrainable extends AgentSac {
 
-  actorOptimizer?: tf.Optimizer;
-  _actionInput?: tf.SymbolicTensor;
+  actorOptimizer: tf.Optimizer;
+  _actionInput: tf.SymbolicTensor;
 
-  q1?: tf.LayersModel;
-  q1Optimizer?: tf.Optimizer;
-  q1Targ?: tf.LayersModel;
+  q1: tf.LayersModel;
+  q1Optimizer: tf.Optimizer;
+  q1Targ: tf.LayersModel;
 
-  q2?: tf.LayersModel;
-  q2Optimizer?: tf.Optimizer;
-  q2Targ?: tf.LayersModel;
+  q2: tf.LayersModel;
+  q2Optimizer: tf.Optimizer;
+  q2Targ: tf.LayersModel;
 
+  alphaOptimizer: tf.Optimizer;
+
+  // TODO: how to reconcile usage?
   _logAlpha?: tf.Variable<tf.Rank.R0>;
-  alphaOptimizer?: tf.Optimizer;
 
-  constructor(props: AgentSacInstanceProps) {
+  constructor(props: AgentSacTrainableInstanceProps) {
     super(props);
+    this.actorOptimizer = props.actorOptimizer;
+    this._actionInput = props.actionInput;
+    this.q1 = props.q1;
+    this.q1Optimizer = props.q1Optimizer;
+    this.q1Targ = props.q1Targ;
+    this.q2 = props.q2;
+    this.q2Optimizer = props.q2Optimizer;
+    this.q2Targ = props.q2Targ;
+    this.alphaOptimizer = props.alphaOptimizer;
   }
 
   async initialize() {
     await super.initialize();
-      
-    this.actorOptimizer = tf.train.adam();
-
-    this._actionInput = tf.input({batchShape: [null, this._nActions]});
-
-    this.q1 = await this._getCritic(NAME.Q1);
-    this.q1Optimizer = tf.train.adam();
-
-    this.q2 = await this._getCritic(NAME.Q2);
-    this.q2Optimizer = tf.train.adam();
-
-    this.q1Targ = await this._getCritic(NAME.Q1_TARGET);
-    this.q2Targ = await this._getCritic(NAME.Q2_TARGET);
-
     this._logAlpha = await this._getLogAlpha(NAME.ALPHA);
-    this.alphaOptimizer = tf.train.adam();
-
     this.updateTargets(1);
-  }
-
-  async _getActor(name = 'actor'): Promise<tf.LayersModel> {
-    const model = await super._getActor(name);
-    model.trainable = true;
-    return model;
-  }
-
-  async _getCritic(name = 'critic') {
-    const checkpoint = await loadModelByName(name);
-    if (checkpoint) return checkpoint
-
-    return createCritic({
-      actionInput: this._actionInput!,
-      frameInputL: this._frameInputL!,
-      frameInputR: this._frameInputR!,
-      name,
-      sighted: this._sighted,
-      telemetryInput: this._telemetryInput!,
-    });
   }
 
   train({

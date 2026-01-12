@@ -39,3 +39,20 @@ export type AgentSacInstanceProps =
     readonly telemetryInput: tf.SymbolicTensor;
     readonly actor: tf.LayersModel; 
   };
+
+export type AgentSacTrainableInstanceProps =
+  & AgentSacInstanceProps
+  & {
+    readonly actorOptimizer: tf.Optimizer;
+    readonly actionInput: tf.SymbolicTensor;
+    readonly q1: tf.LayersModel;
+    readonly q1Optimizer: tf.Optimizer;
+    readonly q1Targ: tf.LayersModel;
+    readonly q2: tf.LayersModel;
+    readonly q2Optimizer: tf.Optimizer;
+    readonly q2Targ: tf.LayersModel;
+    // TODO: What is this?
+    //readonly logAlpha: tf.Variable<tf.Rank.R0>;
+    readonly alphaOptimizer: tf.Optimizer;
+  };
+
