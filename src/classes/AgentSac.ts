@@ -160,36 +160,5 @@ export class AgentSac extends Initializable {
 
             return { pi, mu, logPi }
         }
-
-        /**
-         * Builds actor network model.
-         * 
-         * @param {string} [name = 'actor'] - name of the model
-         * @param {string} trainable - whether a critic is trainable
-         * @returns {tf.LayersModel} model
-         */
-        async _getActor(name = 'actor'): Promise<tf.LayersModel> {
-          const checkpoint = await loadModelByName(name);
-          if (checkpoint) return checkpoint;
-
-          return createActor({
-            frameInputL: this._frameInputL!,
-            frameInputR: this._frameInputR!,
-            nActions: this._nActions,
-            name,
-            sighted: this._sighted,
-            telemetryInput: this._telemetryInput!,
-          });
-        }
-
-        /**
-         * Saves a model to the storage.
-         * 
-         * @param {tf.LayersModel} model 
-         */
-        
-
-        
-        
         
     }
