@@ -7,6 +7,7 @@ import {
   assertShape,
   getLogAlphaByModel,
   getTrainableOnlyWeights,
+  saveCheckpoints,
   saveModel,
   updateTrainableTargets,
 } from '../utils';
@@ -57,8 +58,7 @@ export class AgentSacTrainable extends AgentSac {
       q1Targ: this.q1Targ!,
       q2: this.q2!,
       q2Targ: this.q2Targ!,
-      // TODO: Should this be `1` here?
-      tau: 1,
+      tau: this._tau,
     });
   }
 
@@ -210,21 +210,15 @@ export class AgentSacTrainable extends AgentSac {
   }
 
   async checkpoint() {
-    console.log('Saving...');
-    void this.logAlphaModel.setWeights([
-      tf.tensor([this.logAlpha.arraySync()], [1, 1]),
-    ]);
-
-    await Promise.all([
-      saveModel(this.logAlphaModel),
-      saveModel(this.actor!),
-      saveModel(this.q1!),
-      saveModel(this.q2!),
-      saveModel(this.q1Targ!),
-      saveModel(this.q2Targ!),
-    ]);
-
-    console.log('Saved!');
+    return saveCheckpoints({
+      actor: this.actor!,
+      q1: this.q1!,
+      q1Targ: this.q1Targ!,
+      q2: this.q2!,
+      q2Targ: this.q2Targ!,
+      logAlpha: this.logAlpha,
+      logAlphaModel: this.logAlphaModel,
+    });
   }
 
 }

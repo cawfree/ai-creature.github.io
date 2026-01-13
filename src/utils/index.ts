@@ -490,3 +490,32 @@ export const updateTrainableTargets = ({
   q1Targ.setWeights(w1);
   q2Targ.setWeights(w2);
 };
+
+export const saveCheckpoints = async ({
+  actor,
+  q1,
+  q1Targ,
+  q2,
+  q2Targ,
+  logAlpha,
+  logAlphaModel,
+}: {
+  readonly actor: tf.LayersModel;
+  readonly q1: tf.LayersModel;
+  readonly q2: tf.LayersModel;
+  readonly q1Targ: tf.LayersModel;
+  readonly q2Targ: tf.LayersModel;
+  readonly logAlpha: tf.Variable<tf.Rank.R0>;
+  readonly logAlphaModel: tf.LayersModel;
+}) => {
+  void logAlphaModel.setWeights([tf.tensor([logAlpha.arraySync()], [1, 1])]);
+
+  return Promise.all([
+    saveModel(logAlphaModel),
+    saveModel(actor),
+    saveModel(q1),
+    saveModel(q2),
+    saveModel(q1Targ),
+    saveModel(q2Targ),
+  ]);
+};

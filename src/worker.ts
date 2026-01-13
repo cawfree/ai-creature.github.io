@@ -150,9 +150,9 @@ void (async () => {
                 break
         }
     
-        if (i % rb._limit === 0) {
+        if (i % (BATCH_SIZE_AMPLIFIER * batchSize) === 0) {
           console.log('doing checkpoint');
-          await agent.checkpoint() // timer ~ 500ms, don't await intentionally
+          void agent.checkpoint() // timer ~ 500ms, don't await intentionally
         }
     })
 })()
