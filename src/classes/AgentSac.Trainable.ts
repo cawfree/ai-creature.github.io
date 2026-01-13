@@ -220,6 +220,7 @@ export class AgentSacTrainable extends AgentSac {
   }
 
   async checkpoint() {
+    console.log('Saving...');
     void this.logAlphaModel.setWeights([
       tf.tensor([this.logAlpha.arraySync()], [1, 1]),
     ]);
@@ -232,6 +233,8 @@ export class AgentSacTrainable extends AgentSac {
       saveModel(this.q1Targ!),
       saveModel(this.q2Targ!),
     ]);
+
+    console.log('Saved!');
   }
 
 }

@@ -287,7 +287,6 @@ export const createCreatureEngine = async ({
     const framesBatch = framesNorm.map(fr => tf.stack([fr]))
 
     const delta = (Date.now() - timer) / 1000 // sec
-    console.log('delta (s)', delta)
     const linearVelocity = creature.impostor.getLinearVelocity()
     const linearVelocityNorm = linearVelocity.normalize()
     const acceleration = linearVelocity.subtract(prevLinearVelocity).scale(1/delta).normalize()
@@ -324,13 +323,11 @@ export const createCreatureEngine = async ({
     const action = agent.sampleAction([telemetryBatch, ...framesBatch]) // timer ~5ms
 
     // TODO: !!!!!await find the way to avoid framesNorm.array()
-    console.time('await')
     const [framesArrL, framesArrR,[actionArr]] = await Promise.all([...(framesNorm.map(fr => fr.array())), action.array()]) // action come as a batch of size 1
-    console.timeEnd('await')
 
     const impulse = actionArr.slice(0, 3);
-    console.assert(actionArr.length === 3, actionArr.length)
-    console.assert(impulse.length === 3)
+    assert(actionArr.length === 3, actionArr.length)
+    assert(impulse.length === 3)
 
     // [0,-1,0]
     creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero()) // just in case, probably redundant
@@ -357,7 +354,6 @@ export const createCreatureEngine = async ({
       window.reward += -0.05
 
       if (mesh.startsWith('ball_')) {
-          console.log('reward', mesh)
           window.reward = 1
 
           if (mesh.includes('red'))

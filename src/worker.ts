@@ -8,106 +8,98 @@ import {
   createAgentSacTrainable,
 } from './utils';
 
+const DISABLED = false
+const BATCH_SIZE_AMPLIFIER = 10;
+
 void (async () => {
-    const DISABLED = false
+  const batchSize = 100;
 
-    const {agent} = await createAgentSacTrainable({
-      agentSacProps: {
-        batchSize: 100,
-      },
-    });
+  const {agent} = await createAgentSacTrainable({
+    agentSacProps: {batchSize},
+  });
 
-    const actor = agent.actor;
-    assert(actor);
+  const actor = agent.actor;
+  assert(actor);
 
-    actor.summary();
+  actor.summary();
+
+  // eslint-disable-next-line no-restricted-globals
+  self.postMessage({
+    weights: await Promise.all(actor.getWeights().map(w => w.array())),
+  });
+
+  const rb = new ReplyBuffer(
+     5000 * batchSize,
+    ({state: [telemetry, frameL, frameR], action, reward}: Omit<Transition, 'nextState'>) => {
+      frameL.dispose();
+      frameR.dispose();
+      telemetry.dispose();
+      action.dispose();
+      reward.dispose();
+    },
+  );
+
+  const executeSamples = async () => {
+    const samples = rb.sample(agent._batchSize) // time fast
+    assert(samples.length === agent._batchSize); 
+    
+    tf.tidy(() => {
+      const framesL: tf.Tensor[] = [];
+      const framesR: tf.Tensor[] = [];
+      const telemetries: tf.Tensor[] = [];
+      const actions: tf.Tensor[] = [];
+      const rewards: tf.Tensor[] = [];
+      const nextFramesL: tf.Tensor[] = [];
+      const nextFramesR: tf.Tensor[] = [];
+      const nextTelemetries: tf.Tensor[] = [];
+    
+      for (const {
+        state: [telemetry, frameL, frameR], 
+        action, 
+        reward, 
+        nextState: [nextTelemetry, nextFrameL, nextFrameR] 
+      } of samples) {
+        framesL.push(frameL);
+        framesR.push(frameR);
+        telemetries.push(telemetry);
+        actions.push(action);
+        rewards.push(reward);
+        nextFramesL.push(nextFrameL);
+        nextFramesR.push(nextFrameR);
+        nextTelemetries.push(nextTelemetry);
+      }
+
+      const trainingInput: Omit<Transition, 'id' | 'priority'> = {
+        state: [tf.stack(telemetries), tf.stack(framesL), tf.stack(framesR)],
+        action: tf.stack(actions), 
+        reward: tf.stack(rewards), 
+        nextState: [
+          tf.stack(nextTelemetries),
+          tf.stack(nextFramesL),
+          tf.stack(nextFramesR),
+        ],
+      };
+
+      agent.train(trainingInput);
+    }); 
 
     // eslint-disable-next-line no-restricted-globals
-    self.postMessage({weights: await Promise.all(actor.getWeights().map(w => w.array()))});
+    self.postMessage({
+      weights: await Promise.all(actor.getWeights().map(w => w.array())),
+    });
+  };
 
-    const rb = new ReplyBuffer(
-      50000,
-      ({state: [telemetry, frameL, frameR], action, reward}: Omit<Transition, 'nextState'>) => {
-        frameL.dispose();
-        frameR.dispose();
-        telemetry.dispose();
-        action.dispose();
-        reward.dispose();
-      },
-    );
+  void (async () => {
+    while (true) {
+      await new Promise(resolve => requestAnimationFrame(resolve));
 
-    const job = async () => {
-        if (DISABLED) return 99999
-        if (rb.size < agent._batchSize*10) return 1000
-        
-        const samples = rb.sample(agent._batchSize) // time fast
-        if (!samples.length) return 1000
-    
-        const framesL: tf.Tensor[] = [];
-        const framesR: tf.Tensor[] = [];
-        const telemetries: tf.Tensor[] = [];
-        const actions: tf.Tensor[] = [];
-        const rewards: tf.Tensor[] = [];
-        const nextFramesL: tf.Tensor[] = [];
-        const nextFramesR: tf.Tensor[] = [];
-        const nextTelemetries: tf.Tensor[] = [];
-    
-        for (const {
-          state: [telemetry, frameL, frameR], 
-          action, 
-          reward, 
-          nextState: [nextTelemetry, nextFrameL, nextFrameR] 
-        } of samples) {
-            framesL.push(frameL)
-            framesR.push(frameR)
-            telemetries.push(telemetry)
-            actions.push(action)
-            rewards.push(reward)
-            nextFramesL.push(nextFrameL)
-            nextFramesR.push(nextFrameR)
-            nextTelemetries.push(nextTelemetry)
-        }
-    
-       tf.tidy(() => {
-          console.time('train')
-          const trainingInput: Omit<Transition, 'id' | 'priority'> = {
-            state: [tf.stack(telemetries), tf.stack(framesL), tf.stack(framesR)],
-            action: tf.stack(actions), 
-            reward: tf.stack(rewards), 
-            nextState: [
-              tf.stack(nextTelemetries),
-              tf.stack(nextFramesL),
-              tf.stack(nextFramesR),
-            ],
-          };
+      if (rb.size < agent._batchSize * BATCH_SIZE_AMPLIFIER) continue;
 
-          agent.train(trainingInput);
-          console.timeEnd('train')
-       }); 
-
-        console.time('train postMessage')
-        // eslint-disable-next-line no-restricted-globals
-        self.postMessage({
-          weights: await Promise.all(actor.getWeights().map(w => w.array())),
-        });
-        console.timeEnd('train postMessage')
-    
-        return 1
+      console.log('Training...');
+      await executeSamples();
+      await new Promise(resolve => setTimeout(resolve, 240));
     }
-    
-    /**
-     * Executes job.
-     */
-    const tick = async () => {
-        try {
-            setTimeout(tick, await job())
-        } catch (e) {
-            console.error(e)
-            setTimeout(tick, 5000) // show must go on (҂◡_◡) ᕤ
-        }
-    }
-    
-    setTimeout(tick, 1000)
+  })();
     
     /**
      * Decode transition from the main thread.
@@ -161,7 +153,8 @@ void (async () => {
         }
     
         if (i % rb._limit === 0) {
-            agent.checkpoint() // timer ~ 500ms, don't await intentionally
+          console.log('doing checkpoint');
+          await agent.checkpoint() // timer ~ 500ms, don't await intentionally
         }
     })
 })()

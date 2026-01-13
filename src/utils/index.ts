@@ -2,7 +2,11 @@ import * as tf from '@tensorflow/tfjs';
 import assert from 'minimalistic-assert';
 import isEqual from 'react-fast-compare';
 
-import {AgentSacConstructorProps, AgentSacInstanceProps, AgentSacTrainableInstanceProps} from '../@types';
+import {
+  AgentSacConstructorProps,
+  AgentSacInstanceProps,
+  AgentSacTrainableInstanceProps,
+} from '../@types';
 import {AgentSac, AgentSacTrainable} from '../classes';
 import {NAME, VERSION} from '../constants';
 
@@ -324,6 +328,7 @@ export const createAgentSacTrainableInstanceProps = async ({
     loadModelByName(logAlphaName),
   ]);
 
+  if (maybeLogAlpha) console.log('did log alpha');
   const logAlphaModel = maybeLogAlpha || createLogAlpha({logAlphaName});
 
   const q1Optimizer = tf.train.adam();
