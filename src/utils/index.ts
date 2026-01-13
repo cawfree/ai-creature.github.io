@@ -8,7 +8,7 @@ import {
   AgentSacTrainableInstanceProps,
 } from '../@types';
 import {AgentSac, AgentSacTrainable} from '../classes';
-import {NAME, VERSION} from '../constants';
+import {EPSILON, LOG_STD_MAX, LOG_STD_MIN, NAME, VERSION} from '../constants';
 
 // https://stackoverflow.com/questions/1527803/generating-random-whole-numbers-in-javascript-in-a-specific-range
 export const getRandomInt = (min: number, max: number)  => {
@@ -59,6 +59,54 @@ export const loadModelByName = async (
   if (key in modelsInfo) return tf.loadLayersModel(key);
   return null;
 };
+
+// https://github.com/openai/spinningup/blob/038665d62d569055401d91856abb287263096178/spinup/algos/tf1/sac/core.py#L24
+export const gaussianLikelihood = (x: tf.Tensor, mu: tf.Tensor, logStd: tf.Tensor): tf.Tensor =>
+  tf.sum(tf.scalar(-0.5).mul(x.sub(mu).div(tf.exp(logStd).add(tf.scalar(EPSILON))).square().add(tf.scalar(2).mul(logStd)).add(tf.scalar(Math.log(2 * Math.PI)))), 1, true);
+
+// https://github.com/openai/spinningup/blob/038665d62d569055401d91856abb287263096178/spinup/algos/tf1/sac/core.py#L48
+export const applySquashing = (pi: tf.Tensor, mu: tf.Tensor, logPi: tf.Tensor) => {
+  const adj = tf.scalar(2).mul(tf.scalar(Math.log(2)).sub(pi) .sub(tf.softplus(tf.scalar(-2).mul(pi))));
+  logPi = logPi.sub(tf.sum(adj, 1, true));
+  mu = tf.tanh(mu);
+  pi = tf.tanh(pi);
+  return {pi, mu, logPi};
+};
+
+export const sampleActionFrom = ({
+  actor,
+  batchSize,
+  sighted,
+  state,
+  withLogProbs,
+}: {
+  readonly actor: tf.LayersModel;
+  readonly batchSize: number;
+  readonly sighted: boolean;
+  readonly state: tf.Tensor[];
+  readonly withLogProbs: boolean;
+}) => tf.tidy(() => {
+  const prediction = actor.predict(sighted ? state : state[0], {batchSize});
+  assert(Array.isArray(prediction));
+
+  let [mu, logStd] = prediction;
+
+  // https://github.com/rail-berkeley/rlkit/blob/c81509d982b4d52a6239e7bfe7d2540e3d3cd986/rlkit/torch/sac/policies/gaussian_policy.py#L106
+  logStd = tf.clipByValue(logStd, LOG_STD_MIN, LOG_STD_MAX);
+  
+  const std = tf.exp(logStd);
+
+  // sample normal N(mu = 0, std = 1)
+  const normal = tf.randomNormal(mu.shape, 0, 1.0);
+
+  // reparameterization trick: z = mu + std * epsilon
+  let pi = mu.add(std.mul(normal));
+  let logPi = gaussianLikelihood(pi, mu, logStd);
+
+  ({pi, logPi} = applySquashing(pi, mu, logPi));
+
+  return withLogProbs ? [pi, logPi] : pi;
+});
 
 const createConvEncoder = (inputs: tf.SymbolicTensor): tf.SymbolicTensor => {
   const padding = 'valid';

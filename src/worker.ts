@@ -21,8 +21,6 @@ void (async () => {
   const actor = agent.actor;
   assert(actor);
 
-  actor.summary();
-
   // eslint-disable-next-line no-restricted-globals
   self.postMessage({
     weights: await Promise.all(actor.getWeights().map(w => w.array())),
