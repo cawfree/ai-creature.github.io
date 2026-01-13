@@ -89,7 +89,7 @@ export class AgentSacTrainable extends AgentSac {
           const qTargValue = tf.minimum(q1TargValue, q2TargValue)
   
           // y = r + γ*(1 - d)*(min(Q1Targ(s', a'), Q2Targ(s', a')) - α*log(π(s'))
-          const alpha = this._getAlpha()
+      const alpha = tf.exp(this.logAlpha);
           const target = reward.mul(tf.scalar(this._rewardScale)).add(
               tf.scalar(this._gamma).mul(
                   qTargValue.sub(alpha.mul(logPi))
@@ -150,7 +150,7 @@ export class AgentSacTrainable extends AgentSac {
           assert(!Array.isArray(q1Value) && !Array.isArray(q2Value));
           const criticValue = tf.minimum(q1Value, q2Value);
 
-          const alpha = this._getAlpha();
+          const alpha = tf.exp(this.logAlpha);
           const loss = alpha.mul(logPi).sub(criticValue);
 
           assertShape(freshAction, [this._batchSize, this._nActions]);
@@ -174,7 +174,7 @@ export class AgentSacTrainable extends AgentSac {
 
           const [, logPi] = sampledAction;
 
-          const alpha = this._getAlpha()
+        const alpha = tf.exp(this.logAlpha);
           const loss = tf.scalar(-1).mul(
               alpha.mul( // TODO: not sure whether this should be alpha or logAlpha
                   logPi.add(tf.scalar(this._targetEntropy))
@@ -213,10 +213,6 @@ export class AgentSacTrainable extends AgentSac {
     }
     this.q1Targ!.setWeights(w1);
     this.q2Targ!.setWeights(w2);
-  }
-
-  _getAlpha() {
-    return tf.exp(this.logAlpha);
   }
 
   async checkpoint() {
