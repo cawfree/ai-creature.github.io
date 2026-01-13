@@ -5,29 +5,27 @@ import {Transition} from './@types';
 import {ReplyBuffer} from './classes';
 import {
   assertNumericArray,
-  createAgentSacTrainable,
+  createAgentSacTrainableInstance,
 } from './utils';
 
 const DISABLED = false
 const BATCH_SIZE_AMPLIFIER = 10;
 
 void (async () => {
-  const batchSize = 100;
 
-  const {agent, checkpoint} = await createAgentSacTrainable({
-    agentSacProps: {batchSize},
+  const agentSacTrainableInstance = await createAgentSacTrainableInstance({
+    agentSacProps: {
+      batchSize: 100,
+    },
   });
-
-  const actor = agent.actor;
-  assert(actor);
 
   // eslint-disable-next-line no-restricted-globals
   self.postMessage({
-    weights: await Promise.all(actor.getWeights().map(w => w.array())),
+    weights: await Promise.all(agentSacTrainableInstance.actor.getWeights().map(w => w.array())),
   });
 
   const rb = new ReplyBuffer(
-     5000 * batchSize,
+     5000 * agentSacTrainableInstance.batchSize,
     ({state: [telemetry, frameL, frameR], action, reward}: Omit<Transition, 'nextState'>) => {
       frameL.dispose();
       frameR.dispose();
@@ -38,8 +36,8 @@ void (async () => {
   );
 
   const executeSamples = async () => {
-    const samples = rb.sample(agent._batchSize) // time fast
-    assert(samples.length === agent._batchSize); 
+    const samples = rb.sample(agentSacTrainableInstance.batchSize) // time fast
+    assert(samples.length === agentSacTrainableInstance.batchSize); 
     
     tf.tidy(() => {
       const framesL: tf.Tensor[] = [];
@@ -67,23 +65,23 @@ void (async () => {
         nextTelemetries.push(nextTelemetry);
       }
 
-      const trainingInput: Omit<Transition, 'id' | 'priority'> = {
-        state: [tf.stack(telemetries), tf.stack(framesL), tf.stack(framesR)],
-        action: tf.stack(actions), 
-        reward: tf.stack(rewards), 
-        nextState: [
-          tf.stack(nextTelemetries),
-          tf.stack(nextFramesL),
-          tf.stack(nextFramesR),
-        ],
-      };
-
-      agent.train(trainingInput);
+      void agentSacTrainableInstance.train({
+        transition: {
+          state: [tf.stack(telemetries), tf.stack(framesL), tf.stack(framesR)],
+          action: tf.stack(actions), 
+          reward: tf.stack(rewards), 
+          nextState: [
+            tf.stack(nextTelemetries),
+            tf.stack(nextFramesL),
+            tf.stack(nextFramesR),
+          ],
+        },
+      });
     }); 
 
     // eslint-disable-next-line no-restricted-globals
     self.postMessage({
-      weights: await Promise.all(actor.getWeights().map(w => w.array())),
+      weights: await Promise.all(agentSacTrainableInstance.actor.getWeights().map(w => w.array())),
     });
   };
 
@@ -91,7 +89,7 @@ void (async () => {
     while (true) {
       await new Promise(resolve => requestAnimationFrame(resolve));
 
-      if (rb.size < agent._batchSize * BATCH_SIZE_AMPLIFIER) continue;
+      if (rb.size < agentSacTrainableInstance.batchSize * BATCH_SIZE_AMPLIFIER) continue;
 
       console.log('Training...');
       await executeSamples();
@@ -122,8 +120,8 @@ void (async () => {
           id,
           state: [
             tf.tensor1d(telemetry),
-            tf.tensor3d(frameL, agent._frameStackShape!),
-            tf.tensor3d(frameR, agent._frameStackShape!)
+            tf.tensor3d(frameL, agentSacTrainableInstance.frameStackShape!),
+            tf.tensor3d(frameR, agentSacTrainableInstance.frameStackShape!)
           ],
           action: tf.tensor1d(assertNumericArray(action)),
           reward: tf.tensor1d([reward]),
@@ -150,9 +148,9 @@ void (async () => {
                 break
         }
     
-        if (i % (BATCH_SIZE_AMPLIFIER * batchSize) === 0) {
+        if (i % (BATCH_SIZE_AMPLIFIER * agentSacTrainableInstance.batchSize) === 0) {
           console.log('doing checkpoint');
-          void checkpoint() // timer ~ 500ms, don't await intentionally
+          void agentSacTrainableInstance.checkpoint() // timer ~ 500ms, don't await intentionally
         }
     })
 })()

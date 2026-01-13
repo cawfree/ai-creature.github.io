@@ -2,11 +2,13 @@
 import assert from 'minimalistic-assert';
 import * as tf from '@tensorflow/tfjs';
 
+import {AgentSacInstance} from '../../@types';
+
 const canvas = document.getElementById('renderCanvas');
 const createDefaultEngine = () => new BABYLON.Engine(canvas, true, {
-    preserveDrawingBuffer: true, 
-    stencil: true,
-    disableWebGL2Support: false
+  preserveDrawingBuffer: true, 
+  stencil: true,
+  disableWebGL2Support: false
 })
 
 document.getElementById('like').addEventListener('click', () => (
@@ -223,15 +225,15 @@ const createScene = async ({
 };
 
 export const createCreatureEngine = async ({
-  agent,
+  agentSacInstance,
   onTransitionPublished,
   whileNotBusyWhenReady,
 }: {
-  readonly agent: AgentSac;
+  readonly agentSacInstance: AgentSacInstance;
   readonly onTransitionPublished: (transition: Omit<Transition, 'nextState'>) => void;
   readonly whileNotBusyWhenReady: (fn: Function) => void;
 }) => {
-  assert(agent);
+  assert(agentSacInstance);
   assert(typeof onTransitionPublished === 'function');
 
   await Ammo();
@@ -254,17 +256,17 @@ export const createCreatureEngine = async ({
   }) => {
     void frameStack.push(await Promise.all([
       BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraLeft, {
-        height: agent._frameShape[0],
-        width: agent._frameShape[1],
+        height: agentSacInstance.frameShape[0],
+        width: agentSacInstance.frameShape[1],
       }),
       BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraRight, {
-        height: agent._frameShape[0],
-        width: agent._frameShape[1],
+        height: agentSacInstance.frameShape[0],
+        width: agentSacInstance.frameShape[1],
       }),
     ]));
 
-    if (frameStack.length < agent._nFrames) return;
-    assert(frameStack.length === agent._nFrames);
+    if (frameStack.length < agentSacInstance.nFrames) return;
+    assert(frameStack.length === agentSacInstance.nFrames);
 
     const imgs = await Promise.all(frameStack.flat().map(base64ToImg))
 
@@ -319,8 +321,10 @@ export const createCreatureEngine = async ({
     window.collision = BABYLON.Vector3.Zero() // reset collision point
     window.reward = -0.01
     window.onCollide = undefined
-    const telemetryBatch = tf.tensor(telemetry, [1, agent._nTelemetry])
-    const action = agent.sampleAction([telemetryBatch, ...framesBatch]) // timer ~5ms
+    const telemetryBatch = tf.tensor(telemetry, [1, agentSacInstance.nTelemetry])
+    const [action] = agentSacInstance.sampleAction({
+      state: [telemetryBatch, ...framesBatch],
+    }); // timer ~5ms
 
     // TODO: !!!!!await find the way to avoid framesNorm.array()
     const [framesArrL, framesArrR,[actionArr]] = await Promise.all([...(framesNorm.map(fr => fr.array())), action.array()]) // action come as a batch of size 1

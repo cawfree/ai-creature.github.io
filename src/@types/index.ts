@@ -30,12 +30,13 @@ export type AgentSacConstructorProps = {
 export type AgentSacInstanceProps =
   & AgentSacConstructorProps
   & {
-    readonly frameStackShape: [number, number, number];
+    readonly actor: tf.LayersModel; 
+    readonly frameShape: readonly number[];
     readonly targetEntropy: number;
     readonly frameInputL: tf.SymbolicTensor;
     readonly frameInputR: tf.SymbolicTensor;
+    readonly frameStackShape: [number, number, number];
     readonly telemetryInput: tf.SymbolicTensor;
-    readonly actor: tf.LayersModel; 
   };
 
 export type AgentSacTrainableInstanceProps =
@@ -53,5 +54,42 @@ export type AgentSacTrainableInstanceProps =
     readonly logAlpha: tf.Variable<tf.Rank.R0>;
     readonly alphaOptimizer: tf.Optimizer;
     readonly tau: number;
+  };
+
+export type AgentSacSampleActionCallbackProps = {
+  readonly state: tf.Tensor[];
+};
+
+export type AgentSacSampleActionCallback = (
+  props: AgentSacSampleActionCallbackProps
+) => [pi: tf.Tensor, logPi: tf.Tensor];
+
+export type AgentSacTrainableCheckpointCallback = () => Promise<void>;
+
+export type AgentSacInstance = {
+  // TODO: Shouldn't expose this, use high-level writers.
+  readonly actor: tf.LayersModel; 
+  readonly batchSize: number;
+  readonly frameShape: readonly number[];
+  readonly frameStackShape: [number, number, number];
+  readonly nActions: number;
+  readonly nFrames: number;
+  readonly nTelemetry: number;
+  readonly sampleAction: AgentSacSampleActionCallback;
+};
+
+export type AgentSacTrainableTrainCallbackProps = {
+  readonly transition: Omit<Transition, 'id' | 'priority'>;
+};
+
+export type AgentSacTrainableTrainCallback = (
+  props: AgentSacTrainableTrainCallbackProps
+) => void;
+
+export type AgentSacTrainableInstance =
+  & AgentSacInstance
+  & {
+    readonly checkpoint: AgentSacTrainableCheckpointCallback;
+    readonly train: AgentSacTrainableTrainCallback;
   };
 

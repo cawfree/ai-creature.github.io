@@ -4,11 +4,24 @@ import isEqual from 'react-fast-compare';
 
 import {
   AgentSacConstructorProps,
+  AgentSacInstance,
   AgentSacInstanceProps,
+  AgentSacSampleActionCallback,
+  AgentSacSampleActionCallbackProps,
+  AgentSacTrainableCheckpointCallback,
+  AgentSacTrainableInstance,
   AgentSacTrainableInstanceProps,
+  AgentSacTrainableTrainCallback,
+  AgentSacTrainableTrainCallbackProps,
+  Transition,
 } from '../@types';
-import {AgentSac, AgentSacTrainable} from '../classes';
-import {EPSILON, LOG_STD_MAX, LOG_STD_MIN, NAME, VERSION} from '../constants';
+import {
+  EPSILON,
+  LOG_STD_MAX,
+  LOG_STD_MIN,
+  NAME,
+  VERSION,
+} from '../constants';
 
 // https://stackoverflow.com/questions/1527803/generating-random-whole-numbers-in-javascript-in-a-specific-range
 export const getRandomInt = (min: number, max: number)  => {
@@ -78,14 +91,12 @@ export const sampleActionFrom = ({
   batchSize,
   sighted,
   state,
-  withLogProbs,
 }: {
   readonly actor: tf.LayersModel;
   readonly batchSize: number;
   readonly sighted: boolean;
   readonly state: tf.Tensor[];
-  readonly withLogProbs: boolean;
-}) => tf.tidy(() => {
+}): [pi: tf.Tensor, logPi: tf.Tensor] => tf.tidy(() => {
   const prediction = actor.predict(sighted ? state : state[0], {batchSize});
   assert(Array.isArray(prediction));
 
@@ -104,8 +115,7 @@ export const sampleActionFrom = ({
   let logPi = gaussianLikelihood(pi, mu, logStd);
 
   ({pi, logPi} = applySquashing(pi, mu, logPi));
-
-  return withLogProbs ? [pi, logPi] : pi;
+  return [pi, logPi];
 });
 
 const createConvEncoder = (inputs: tf.SymbolicTensor): tf.SymbolicTensor => {
@@ -284,23 +294,6 @@ const createAgentSacInstanceProps = async ({
   };
 };
 
-export const createAgentSac = async ({
-  // TODO: force specify name
-  actorName = NAME.ACTOR,
-  agentSacProps = Object.create(null),
-}: {
-  readonly actorName?: string;
-  readonly agentSacProps?: Partial<AgentSacConstructorProps>;
-} = Object.create(null)) => {
-  const agentSacInstanceProps =
-    await createAgentSacInstanceProps({actorName, agentSacProps});
-
-  const agent = new AgentSac(agentSacInstanceProps);
-  // TODO: remove `Initializable`.
-  //await agent.initialize();
-  return {agent};
-};
-
 const createLogAlpha = ({
   logAlphaName,
 }: {
@@ -312,7 +305,7 @@ const createLogAlpha = ({
   return model;
 };
 
-export const createAgentSacTrainableInstanceProps = async ({ 
+const createAgentSacTrainableInstanceProps = async ({ 
   actorName,
   agentSacProps,
   logAlphaName,
@@ -400,47 +393,6 @@ export const createAgentSacTrainableInstanceProps = async ({
   };
 };
 
-export const createAgentSacTrainable = async ({
-  // TODO: force specify names
-  actorName = NAME.ACTOR,
-  agentSacProps = Object.create(null),
-  logAlphaName = NAME.ALPHA,
-  q1Name = NAME.Q1,
-  q1TargetName = NAME.Q1_TARGET,
-  q2Name = NAME.Q2,
-  q2TargetName = NAME.Q2_TARGET,
-  tau = 5e-3,
-}: {
-  readonly actorName?: string;
-  readonly agentSacProps?: Partial<AgentSacConstructorProps>;
-  readonly logAlphaName?: string;
-  readonly q1Name?: string;
-  readonly q1TargetName?: string;
-  readonly q2Name?: string;
-  readonly q2TargetName?: string;
-  readonly tau?: number;
-} = Object.create(null)) => {
-  const agentSacTrainableInstanceProps =
-    await createAgentSacTrainableInstanceProps({
-      actorName,
-      agentSacProps,
-      logAlphaName,
-      q1Name,
-      q1TargetName,
-      q2Name,
-      q2TargetName,
-      tau,
-    });
-
-  const agent = new AgentSacTrainable(agentSacTrainableInstanceProps);
-
-  void updateTrainableTargets(agentSacTrainableInstanceProps);
-
-  const checkpoint = () => saveCheckpoints(agentSacTrainableInstanceProps);
-
-  return {agent, checkpoint};
-};
-
 const getLogAlphaByModel = (model: tf.LayersModel): tf.Variable<tf.Rank.R0> => {
   const [weights] = model.getWeights();
   assert(weights);
@@ -457,7 +409,7 @@ const getLogAlphaByModel = (model: tf.LayersModel): tf.Variable<tf.Rank.R0> => {
   return tf.variable(tf.scalar(child), true /* trainable */);
 };
 
-export const updateTrainableTargets = ({
+const updateTrainableTargets = ({
   q1,
   q1Targ,
   q2,
@@ -523,7 +475,7 @@ const saveCheckpoints = async ({
   ]);
 };
 
-export const trainAlpha = async ({
+const trainAlpha = async ({
   actor,
   alphaOptimizer,
   batchSize,
@@ -542,7 +494,7 @@ export const trainAlpha = async ({
 }) => {
   const alphaLossFunction = (): tf.Scalar => {
     const sampledAction =
-      sampleActionFrom({actor, batchSize, sighted, state, withLogProbs: true});
+      sampleActionFrom({actor, batchSize, sighted, state});
 
     assert(Array.isArray(sampledAction));
     const [, logPi] = sampledAction;
@@ -556,4 +508,305 @@ export const trainAlpha = async ({
   
   const {grads} = tf.variableGrads(alphaLossFunction, [logAlpha]);
   void alphaOptimizer.applyGradients(grads);
+};
+
+const trainActor = ({
+  actor,
+  actorOptimizer,
+  batchSize,
+  logAlpha,
+  nActions,
+  q1,
+  q2,
+  sighted,
+  state,
+}: {
+  readonly actor: tf.LayersModel;
+  readonly actorOptimizer: tf.Optimizer;
+  readonly batchSize: number;
+  readonly logAlpha: tf.Variable<tf.Rank.R0>;
+  readonly nActions: number;
+  readonly q1: tf.LayersModel;
+  readonly q2: tf.LayersModel;
+  readonly sighted: boolean;
+  readonly state: tf.Tensor[];
+}) => {
+  // TODO: consider delayed update of policy and targets (if possible)
+  const actorLossFunction = (): tf.Scalar => {
+    const sampledAction =
+      sampleActionFrom({actor, batchSize, sighted, state});
+  
+      assert(Array.isArray(sampledAction));
+  
+      const [freshAction, logPi] = sampledAction;
+      
+      const q1Value = q1.predict(sighted ? [...state, freshAction] : [state[0], freshAction], {batchSize});
+      const q2Value = q2.predict(sighted ? [...state, freshAction] : [state[0], freshAction], {batchSize});
+      
+      assert(!Array.isArray(q1Value) && !Array.isArray(q2Value));
+      const criticValue = tf.minimum(q1Value, q2Value);
+  
+      const alpha = tf.exp(logAlpha);
+      const loss = alpha.mul(logPi).sub(criticValue);
+  
+      assertShape(freshAction, [batchSize, nActions]);
+      assertShape(logPi, [batchSize, 1]);
+      assertShape(q1Value, [batchSize, 1]);
+      assertShape(criticValue, [batchSize, 1]);
+      assertShape(loss, [batchSize, 1]);
+  
+      return tf.mean(loss)
+  };
+      
+  const {grads} = tf.variableGrads(actorLossFunction, getTrainableOnlyWeights(actor));
+  void actorOptimizer!.applyGradients(grads);
+};
+
+const trainCritics = ({
+  actor,
+  batchSize,
+  gamma,
+  logAlpha,
+  nActions,
+  q1,
+  q1Optimizer,
+  q1Targ,
+  q2,
+  q2Optimizer,
+  q2Targ,
+  rewardScale,
+  sighted,
+  transition: {state, action, reward, nextState},
+}: {
+  readonly actor: tf.LayersModel;
+  readonly batchSize: number;
+  readonly gamma: number;
+  readonly logAlpha: tf.Variable<tf.Rank.R0>;
+  readonly nActions: number;
+  readonly q1: tf.LayersModel;
+  readonly q1Optimizer: tf.Optimizer;
+  readonly q1Targ: tf.LayersModel;
+  readonly q2: tf.LayersModel;
+  readonly q2Optimizer: tf.Optimizer;
+  readonly q2Targ: tf.LayersModel;
+  readonly rewardScale: number;
+  readonly sighted: boolean;
+  readonly transition: Omit<Transition, 'id' | 'priority'>;
+}) => {
+  const getQLossFunction = (() => {
+
+    const sampledAction =
+      sampleActionFrom({actor, batchSize, sighted, state});
+
+    assert(Array.isArray(sampledAction));
+    const [nextFreshAction, logPi] = sampledAction;
+
+    const q1TargValue = q1Targ.predict(sighted ? [...nextState, nextFreshAction] : [nextState[0], nextFreshAction], {batchSize});
+    const q2TargValue = q2Targ.predict(sighted ? [...nextState, nextFreshAction] : [nextState[0], nextFreshAction], {batchSize});
+    
+    assert(!Array.isArray(q1TargValue) && !Array.isArray(q2TargValue));
+    const qTargValue = tf.minimum(q1TargValue, q2TargValue)
+  
+    // y = r + γ*(1 - d)*(min(Q1Targ(s', a'), Q2Targ(s', a')) - α*log(π(s'))
+    const alpha = tf.exp(logAlpha);
+    const target = reward.mul(tf.scalar(rewardScale)).add(tf.scalar(gamma).mul(qTargValue.sub(alpha.mul(logPi))));
+                      
+    assertShape(nextFreshAction, [batchSize, nActions]);
+    assertShape(logPi, [batchSize, 1]);
+    assertShape(qTargValue, [batchSize, 1]);
+    assertShape(target, [batchSize, 1]);
+  
+    return (q: tf.LayersModel) => (): tf.Scalar => {
+      const qValue = q.predict(sighted ? [...state, action] : [state[0], action], {batchSize});
+      assert(!Array.isArray(qValue));
+      
+      const loss = tf.scalar(0.5).mul(tf.mean(qValue.sub(target).square()));
+      assertShape(qValue, [batchSize, 1]);
+
+      return assertScalar(loss);
+    };
+  })();
+  
+  for (const [q, optimizer] of [[q1, q1Optimizer] as const, [q2, q2Optimizer] as const]) {
+    assert(q && optimizer);
+    const qLossFunction = getQLossFunction(q);
+    const {grads} = tf.variableGrads(qLossFunction, getTrainableOnlyWeights(q!));
+    void optimizer.applyGradients(grads);
+  }
+
+};
+
+const trainAgentSac = ({
+  actor,
+  actorOptimizer,
+  alphaOptimizer,
+  batchSize,
+  frameStackShape,
+  gamma,
+  logAlpha,
+  nActions,
+  nTelemetry,
+  q1,
+  q1Optimizer,
+  q1Targ,
+  q2,
+  q2Optimizer,
+  q2Targ,
+  rewardScale,
+  sighted,
+  targetEntropy,
+  tau,
+  transition,
+}: {
+  readonly actor: tf.LayersModel;
+  readonly actorOptimizer: tf.Optimizer;
+  readonly alphaOptimizer: tf.Optimizer;
+  readonly batchSize: number;
+  readonly frameStackShape: [number, number, number];
+  readonly gamma: number;
+  readonly logAlpha: tf.Variable<tf.Rank.R0>;
+  readonly nActions: number;
+  readonly nTelemetry: number;
+  readonly q1: tf.LayersModel;
+  readonly q1Optimizer: tf.Optimizer;
+  readonly q1Targ: tf.LayersModel;
+  readonly q2: tf.LayersModel;
+  readonly q2Optimizer: tf.Optimizer;
+  readonly q2Targ: tf.LayersModel;
+  readonly rewardScale: number;
+  readonly sighted: boolean;
+  readonly targetEntropy: number;
+  readonly tau: number;
+  readonly transition: Omit<Transition, 'id' | 'priority'>;
+}) => tf.tidy(() => {
+
+  const {state, action, reward, nextState} = transition;
+  assertShape(state[0], [batchSize, nTelemetry]);
+  assertShape(state[1], [batchSize, ...frameStackShape]);
+  assertShape(action, [batchSize, nActions]);
+  assertShape(reward, [batchSize, 1]);
+  assertShape(nextState[0], [batchSize, nTelemetry]);
+  assertShape(nextState[1], [batchSize, ...frameStackShape]);
+  
+  void trainCritics({
+    actor,
+    batchSize,
+    gamma,
+    logAlpha,
+    nActions,
+    q1,
+    q1Optimizer,
+    q1Targ,
+    q2,
+    q2Optimizer,
+    q2Targ,
+    rewardScale,
+    sighted,
+    transition,
+  });
+
+  void trainActor({actor, actorOptimizer, batchSize, logAlpha, nActions, q1, q2, sighted, state});
+  void trainAlpha({actor, alphaOptimizer, batchSize, logAlpha, sighted, state, targetEntropy});
+
+  void updateTrainableTargets({q1, q1Targ, q2, q2Targ, tau});
+});
+
+const createAgentSacInstanceResult = ({
+  agentSacInstanceProps,
+}: {
+  readonly agentSacInstanceProps: AgentSacInstanceProps;
+}): AgentSacInstance => {
+  const {
+    actor,
+    batchSize,
+    frameShape,
+    frameStackShape,
+    nActions,
+    nFrames,
+    nTelemetry,
+    sighted,
+  } = agentSacInstanceProps;
+
+  const sampleAction: AgentSacSampleActionCallback =
+    ({state}: AgentSacSampleActionCallbackProps) => sampleActionFrom({
+      actor,
+      batchSize,
+      sighted,
+      state,
+    }); 
+
+  return {
+    actor,
+    batchSize,
+    frameShape,
+    frameStackShape,
+    nActions,
+    nFrames,
+    nTelemetry,
+    sampleAction,
+  };
+};
+
+export const createAgentSacInstance = async ({
+  // TODO: force specify name
+  actorName = NAME.ACTOR,
+  agentSacProps = Object.create(null),
+}: {
+  readonly actorName?: string;
+  readonly agentSacProps?: Partial<AgentSacConstructorProps>;
+} = Object.create(null)): Promise<AgentSacInstance> => createAgentSacInstanceResult({
+  agentSacInstanceProps: 
+    await createAgentSacInstanceProps({actorName, agentSacProps}),
+});
+
+export const createAgentSacTrainableInstance = async ({
+  // TODO: force specify names
+  actorName = NAME.ACTOR,
+  agentSacProps = Object.create(null),
+  logAlphaName = NAME.ALPHA,
+  q1Name = NAME.Q1,
+  q1TargetName = NAME.Q1_TARGET,
+  q2Name = NAME.Q2,
+  q2TargetName = NAME.Q2_TARGET,
+  tau = 5e-3,
+}: {
+  readonly actorName?: string;
+  readonly agentSacProps?: Partial<AgentSacConstructorProps>;
+  readonly logAlphaName?: string;
+  readonly q1Name?: string;
+  readonly q1TargetName?: string;
+  readonly q2Name?: string;
+  readonly q2TargetName?: string;
+  readonly tau?: number;
+} = Object.create(null)): Promise<AgentSacTrainableInstance> => {
+  const agentSacTrainableInstanceProps =
+    await createAgentSacTrainableInstanceProps({
+      actorName,
+      agentSacProps,
+      logAlphaName,
+      q1Name,
+      q1TargetName,
+      q2Name,
+      q2TargetName,
+      tau,
+    });
+
+  void updateTrainableTargets(agentSacTrainableInstanceProps);
+
+  const checkpoint: AgentSacTrainableCheckpointCallback =
+    async () => void saveCheckpoints(agentSacTrainableInstanceProps);
+  
+  const agentSacInstanceResult =
+    createAgentSacInstanceResult({
+      agentSacInstanceProps: agentSacTrainableInstanceProps,
+    });
+
+  const train: AgentSacTrainableTrainCallback = ({
+    transition,
+  }: AgentSacTrainableTrainCallbackProps) => trainAgentSac({
+    ...agentSacTrainableInstanceProps,
+    transition,
+  });
+
+  return {...agentSacInstanceResult, checkpoint, train};
 };

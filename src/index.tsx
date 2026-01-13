@@ -7,7 +7,7 @@ import './index.css';
 
 import {Transition} from './@types';
 import {creature} from './examples';
-import {createAgentSac} from './utils';
+import {createAgentSacInstance} from './utils';
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
@@ -15,8 +15,7 @@ const root = ReactDOM.createRoot(
 root.render(<React.StrictMode />);
 
 (async () => { 
-  const {agent} = await createAgentSac();
-
+  const agentSacInstance = await createAgentSacInstance();
   const worker = new Worker(new URL('./worker.ts', import.meta.url), {type: 'module'});
 
   let inited = false;
@@ -30,7 +29,7 @@ root.render(<React.StrictMode />);
 
     void tf.tidy(() => {
       inited = true;
-      return void agent.actor!.setWeights(weights.map(w => tf.tensor(w)));
+      return void agentSacInstance.actor.setWeights(weights.map(w => tf.tensor(w)));
     });
   });
 
@@ -49,7 +48,7 @@ root.render(<React.StrictMode />);
   };
 
   return creature.createCreatureEngine({
-    agent,
+    agentSacInstance,
     onTransitionPublished: (
       transition: Omit<Transition, 'nextState'>
     ) => worker.postMessage({action: 'newTransition', transition}),
