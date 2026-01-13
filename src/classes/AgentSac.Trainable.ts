@@ -8,7 +8,7 @@ import {
   getLogAlphaByModel,
   getTrainableOnlyWeights,
   saveCheckpoints,
-  saveModel,
+  trainAlpha,
   updateTrainableTargets,
 } from '../utils';
 
@@ -48,18 +48,6 @@ export class AgentSacTrainable extends AgentSac {
     this.logAlphaModel = props.logAlphaModel;
     this.logAlpha = getLogAlphaByModel(this.logAlphaModel);
     this._tau = props.tau;
-  }
-
-  async initialize() {
-    await super.initialize();
-
-    return updateTrainableTargets({
-      q1: this.q1!,
-      q1Targ: this.q1Targ!,
-      q2: this.q2!,
-      q2Targ: this.q2Targ!,
-      tau: this._tau,
-    });
   }
 
   train({
@@ -181,32 +169,21 @@ export class AgentSacTrainable extends AgentSac {
           return tf.mean(loss)
       }
       
-      const { value, grads } = tf.variableGrads(actorLossFunction, getTrainableOnlyWeights(this.actor!)) // true means trainableOnly
+      const { grads } = tf.variableGrads(actorLossFunction, getTrainableOnlyWeights(this.actor!)) // true means trainableOnly
       
       this.actorOptimizer!.applyGradients(grads)
   }
 
   _trainAlpha(state: tf.Tensor[]) {
-      const alphaLossFunction = (): tf.Scalar => {
-          const sampledAction = this.sampleAction(state, true)
-          assert(Array.isArray(sampledAction));
-
-          const [, logPi] = sampledAction;
-
-        const alpha = tf.exp(this.logAlpha);
-          const loss = tf.scalar(-1).mul(
-              alpha.mul( // TODO: not sure whether this should be alpha or logAlpha
-                  logPi.add(tf.scalar(this._targetEntropy))
-              )
-          )
-
-          assertShape(loss, [this._batchSize, 1]);
-          return tf.mean(loss);
-      }
-      
-      const {grads} = tf.variableGrads(alphaLossFunction, [this.logAlpha]) // true means trainableOnly
-      
-      this.alphaOptimizer!.applyGradients(grads)
+    return trainAlpha({
+      actor: this.actor!,
+      alphaOptimizer: this.alphaOptimizer!,
+      batchSize: this._batchSize,
+      logAlpha: this.logAlpha,
+      sighted: this._sighted,
+      state,
+      targetEntropy: this._targetEntropy,
+    });
   }
 
   async checkpoint() {

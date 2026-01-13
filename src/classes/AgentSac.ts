@@ -3,9 +3,7 @@ import * as tf from '@tensorflow/tfjs';
 import {AgentSacInstanceProps} from '../@types';
 import {sampleActionFrom} from '../utils';
 
-import {Initializable} from './Initializable';
-
-export class AgentSac extends Initializable {
+export class AgentSac {
 
   /* constructor */
   _batchSize: number;
@@ -28,7 +26,6 @@ export class AgentSac extends Initializable {
   actor: tf.LayersModel; 
 
   constructor(props: AgentSacInstanceProps) {
-    super();
     this._batchSize = props.batchSize;
     this._frameShape = props.frameShape;
     this._nFrames = props.nFrames;

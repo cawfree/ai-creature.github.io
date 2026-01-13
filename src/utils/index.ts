@@ -297,7 +297,7 @@ export const createAgentSac = async ({
 
   const agent = new AgentSac(agentSacInstanceProps);
   // TODO: remove `Initializable`.
-  await agent.initialize();
+  //await agent.initialize();
   return {agent};
 };
 
@@ -376,7 +376,6 @@ export const createAgentSacTrainableInstanceProps = async ({
     loadModelByName(logAlphaName),
   ]);
 
-  if (maybeLogAlpha) console.log('did log alpha');
   const logAlphaModel = maybeLogAlpha || createLogAlpha({logAlphaName});
 
   const q1Optimizer = tf.train.adam();
@@ -433,8 +432,8 @@ export const createAgentSacTrainable = async ({
 
   const agent = new AgentSacTrainable(agentSacTrainableInstanceProps);
 
-  await agent.initialize();
-  await agent.checkpoint();
+  void updateTrainableTargets(agentSacTrainableInstanceProps);
+
   return {agent};
 };
 
@@ -518,4 +517,39 @@ export const saveCheckpoints = async ({
     saveModel(q1Targ),
     saveModel(q2Targ),
   ]);
+};
+
+export const trainAlpha = async ({
+  actor,
+  alphaOptimizer,
+  batchSize,
+  logAlpha,
+  sighted,
+  state,
+  targetEntropy,
+}: {
+  readonly actor: tf.LayersModel;
+  readonly alphaOptimizer: tf.Optimizer;
+  readonly batchSize: number;
+  readonly logAlpha: tf.Variable<tf.Rank.R0>;
+  readonly sighted: boolean;
+  readonly state: tf.Tensor[];
+  readonly targetEntropy: number;
+}) => {
+  const alphaLossFunction = (): tf.Scalar => {
+    const sampledAction =
+      sampleActionFrom({actor, batchSize, sighted, state, withLogProbs: true});
+
+    assert(Array.isArray(sampledAction));
+    const [, logPi] = sampledAction;
+
+    const alpha = tf.exp(logAlpha);
+    const loss = tf.scalar(-1).mul(alpha.mul(logPi.add(tf.scalar(targetEntropy))));
+
+    assertShape(loss, [batchSize, 1]);
+    return tf.mean(loss);
+  };
+  
+  const {grads} = tf.variableGrads(alphaLossFunction, [logAlpha]);
+  void alphaOptimizer.applyGradients(grads);
 };
