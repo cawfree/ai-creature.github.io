@@ -50,6 +50,7 @@ export type AgentSacTrainableInstanceProps =
     readonly q2Optimizer: tf.Optimizer;
     readonly q2Targ: tf.LayersModel;
     readonly logAlphaModel: tf.LayersModel;
+    readonly logAlpha: tf.Variable<tf.Rank.R0>;
     readonly alphaOptimizer: tf.Optimizer;
     readonly tau: number;
   };

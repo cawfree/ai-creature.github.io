@@ -377,6 +377,7 @@ export const createAgentSacTrainableInstanceProps = async ({
   ]);
 
   const logAlphaModel = maybeLogAlpha || createLogAlpha({logAlphaName});
+  const logAlpha = getLogAlphaByModel(logAlphaModel);
 
   const q1Optimizer = tf.train.adam();
   const q2Optimizer = tf.train.adam();
@@ -393,6 +394,7 @@ export const createAgentSacTrainableInstanceProps = async ({
     q2,
     q2Targ,
     q2Optimizer,
+    logAlpha,
     logAlphaModel,
     tau,
   };
@@ -434,10 +436,12 @@ export const createAgentSacTrainable = async ({
 
   void updateTrainableTargets(agentSacTrainableInstanceProps);
 
-  return {agent};
+  const checkpoint = () => saveCheckpoints(agentSacTrainableInstanceProps);
+
+  return {agent, checkpoint};
 };
 
-export const getLogAlphaByModel = (model: tf.LayersModel): tf.Variable<tf.Rank.R0> => {
+const getLogAlphaByModel = (model: tf.LayersModel): tf.Variable<tf.Rank.R0> => {
   const [weights] = model.getWeights();
   assert(weights);
 
@@ -490,7 +494,7 @@ export const updateTrainableTargets = ({
   q2Targ.setWeights(w2);
 };
 
-export const saveCheckpoints = async ({
+const saveCheckpoints = async ({
   actor,
   q1,
   q1Targ,

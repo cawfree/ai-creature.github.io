@@ -14,7 +14,7 @@ const BATCH_SIZE_AMPLIFIER = 10;
 void (async () => {
   const batchSize = 100;
 
-  const {agent} = await createAgentSacTrainable({
+  const {agent, checkpoint} = await createAgentSacTrainable({
     agentSacProps: {batchSize},
   });
 
@@ -152,7 +152,7 @@ void (async () => {
     
         if (i % (BATCH_SIZE_AMPLIFIER * batchSize) === 0) {
           console.log('doing checkpoint');
-          void agent.checkpoint() // timer ~ 500ms, don't await intentionally
+          void checkpoint() // timer ~ 500ms, don't await intentionally
         }
     })
 })()

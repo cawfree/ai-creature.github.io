@@ -5,9 +5,7 @@ import {AgentSacTrainableInstanceProps, Transition} from '../@types';
 import {
   assertScalar,
   assertShape,
-  getLogAlphaByModel,
   getTrainableOnlyWeights,
-  saveCheckpoints,
   trainAlpha,
   updateTrainableTargets,
 } from '../utils';
@@ -46,7 +44,7 @@ export class AgentSacTrainable extends AgentSac {
     this.q2Targ = props.q2Targ;
     this.alphaOptimizer = props.alphaOptimizer;
     this.logAlphaModel = props.logAlphaModel;
-    this.logAlpha = getLogAlphaByModel(this.logAlphaModel);
+    this.logAlpha = props.logAlpha;
     this._tau = props.tau;
   }
 
@@ -186,16 +184,16 @@ export class AgentSacTrainable extends AgentSac {
     });
   }
 
-  async checkpoint() {
-    return saveCheckpoints({
-      actor: this.actor!,
-      q1: this.q1!,
-      q1Targ: this.q1Targ!,
-      q2: this.q2!,
-      q2Targ: this.q2Targ!,
-      logAlpha: this.logAlpha,
-      logAlphaModel: this.logAlphaModel,
-    });
-  }
+  //async checkpoint() {
+  //  return saveCheckpoints({
+  //    actor: this.actor!,
+  //    q1: this.q1!,
+  //    q1Targ: this.q1Targ!,
+  //    q2: this.q2!,
+  //    q2Targ: this.q2Targ!,
+  //    logAlpha: this.logAlpha,
+  //    logAlphaModel: this.logAlphaModel,
+  //  });
+  //}
 
 }
