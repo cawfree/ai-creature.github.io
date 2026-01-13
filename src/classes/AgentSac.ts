@@ -14,7 +14,6 @@ export class AgentSac extends Initializable {
   _nActions: number;
   _nTelemetry: number;
   _gamma: number;
-  _tau: number;
   _sighted: boolean;
   _rewardScale: number;
   _frameStackShape: [number, number, number];
@@ -36,7 +35,6 @@ export class AgentSac extends Initializable {
     this._nActions = props.nActions;
     this._nTelemetry = props.nTelemetry;
     this._gamma = props.gamma;
-    this._tau = props.tau;
     this._sighted = props.sighted;
     this._rewardScale = props.rewardScale;
     this._frameStackShape = props.frameStackShape;

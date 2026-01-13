@@ -239,7 +239,6 @@ const createAgentSacInstanceProps = async ({
     nActions = 3, // 3 - impuls, 3 - RGB color
     nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
     gamma = 0.99, // Discount factor (γ)
-    tau = 5e-3, // Target smoothing coefficient (τ)
     sighted = true,
     rewardScale = 10,
   },
@@ -273,7 +272,6 @@ const createAgentSacInstanceProps = async ({
     nActions,
     nTelemetry,
     gamma,
-    tau,
     sighted,
     rewardScale,
     frameStackShape,
@@ -322,6 +320,7 @@ export const createAgentSacTrainableInstanceProps = async ({
   q1TargetName,
   q2Name,
   q2TargetName,
+  tau,
 }: {
   readonly actorName: string;
   readonly agentSacProps: Partial<AgentSacConstructorProps>;
@@ -330,6 +329,7 @@ export const createAgentSacTrainableInstanceProps = async ({
   readonly q1TargetName: string;
   readonly q2Name: string;
   readonly q2TargetName: string;
+  readonly tau: number;
 }): Promise<AgentSacTrainableInstanceProps> => {
   const agentSacInstanceProps =
     await createAgentSacInstanceProps({actorName, agentSacProps});
@@ -395,6 +395,7 @@ export const createAgentSacTrainableInstanceProps = async ({
     q2Targ,
     q2Optimizer,
     logAlphaModel,
+    tau,
   };
 };
 
@@ -407,6 +408,7 @@ export const createAgentSacTrainable = async ({
   q1TargetName = NAME.Q1_TARGET,
   q2Name = NAME.Q2,
   q2TargetName = NAME.Q2_TARGET,
+  tau = 5e-3,
 }: {
   readonly actorName?: string;
   readonly agentSacProps?: Partial<AgentSacConstructorProps>;
@@ -415,6 +417,7 @@ export const createAgentSacTrainable = async ({
   readonly q1TargetName?: string;
   readonly q2Name?: string;
   readonly q2TargetName?: string;
+  readonly tau?: number;
 } = Object.create(null)) => {
   const agentSacTrainableInstanceProps =
     await createAgentSacTrainableInstanceProps({
@@ -425,6 +428,7 @@ export const createAgentSacTrainable = async ({
       q1TargetName,
       q2Name,
       q2TargetName,
+      tau,
     });
 
   const agent = new AgentSacTrainable(agentSacTrainableInstanceProps);
@@ -448,4 +452,41 @@ export const getLogAlphaByModel = (model: tf.LayersModel): tf.Variable<tf.Rank.R
   assert(typeof child === 'number');
 
   return tf.variable(tf.scalar(child), true /* trainable */);
+};
+
+export const updateTrainableTargets = ({
+  q1,
+  q1Targ,
+  q2,
+  q2Targ,
+  tau,
+}: {
+  readonly q1: tf.LayersModel;
+  readonly q1Targ: tf.LayersModel;
+  readonly q2: tf.LayersModel;
+  readonly q2Targ: tf.LayersModel;
+  readonly tau: number;
+}) => {
+  const q1W = q1.getWeights();
+  const q2W = q2.getWeights();
+
+  const q1WTarg = q1Targ.getWeights();
+  const q2WTarg = q2Targ.getWeights();
+
+  const len = q1W.length;
+
+  const tau_t = tf.scalar(tau);
+
+  const calc = (w: tf.Tensor, wTarg: tf.Tensor) =>
+    wTarg.mul(tf.scalar(1).sub(tau_t)).add(w.mul(tau_t));
+    
+  const w1 = [];
+  const w2 = [];
+  for (let i = 0; i < len; i++) {
+    w1.push(calc(q1W[i], q1WTarg[i]));
+    w2.push(calc(q2W[i], q2WTarg[i]));
+  }
+
+  q1Targ.setWeights(w1);
+  q2Targ.setWeights(w2);
 };

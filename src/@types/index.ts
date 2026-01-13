@@ -21,8 +21,6 @@ export type AgentSacConstructorProps = {
   readonly nTelemetry: number;
   // Discount factor (γ)
   readonly gamma: number;
-  // Target smoothing coefficient (τ)
-  readonly tau: number;
   // Whether the actor is trainable
   // for tests
   readonly sighted: boolean;
@@ -53,5 +51,6 @@ export type AgentSacTrainableInstanceProps =
     readonly q2Targ: tf.LayersModel;
     readonly logAlphaModel: tf.LayersModel;
     readonly alphaOptimizer: tf.Optimizer;
+    readonly tau: number;
   };
 

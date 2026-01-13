@@ -8,6 +8,7 @@ import {
   getLogAlphaByModel,
   getTrainableOnlyWeights,
   saveModel,
+  updateTrainableTargets,
 } from '../utils';
 
 import {AgentSac} from './AgentSac';
@@ -30,6 +31,8 @@ export class AgentSacTrainable extends AgentSac {
   logAlphaModel: tf.LayersModel;
   logAlpha: tf.Variable<tf.Rank.R0>;
 
+  _tau: number;
+
   constructor(props: AgentSacTrainableInstanceProps) {
     super(props);
     this.actorOptimizer = props.actorOptimizer;
@@ -43,11 +46,20 @@ export class AgentSacTrainable extends AgentSac {
     this.alphaOptimizer = props.alphaOptimizer;
     this.logAlphaModel = props.logAlphaModel;
     this.logAlpha = getLogAlphaByModel(this.logAlphaModel);
+    this._tau = props.tau;
   }
 
   async initialize() {
     await super.initialize();
-    this.updateTargets(1);
+
+    return updateTrainableTargets({
+      q1: this.q1!,
+      q1Targ: this.q1Targ!,
+      q2: this.q2!,
+      q2Targ: this.q2Targ!,
+      // TODO: Should this be `1` here?
+      tau: 1,
+    });
   }
 
   train({
@@ -67,7 +79,14 @@ export class AgentSacTrainable extends AgentSac {
       void this._trainCritics({state, action, reward, nextState});
       void this._trainActor(state);
       void this._trainAlpha(state);
-      void this.updateTargets();
+
+      void updateTrainableTargets({
+        q1: this.q1!,
+        q1Targ: this.q1Targ!,
+        q2: this.q2!,
+        q2Targ: this.q2Targ!,
+        tau: this._tau,
+      });
     });
   }
 
@@ -188,31 +207,6 @@ export class AgentSacTrainable extends AgentSac {
       const {grads} = tf.variableGrads(alphaLossFunction, [this.logAlpha]) // true means trainableOnly
       
       this.alphaOptimizer!.applyGradients(grads)
-  }
-
-  /**
-   * Soft update target Q-networks.
-   * 
-   * @param {number} [tau = this._tau] - smoothing constant τ for exponentially moving average: `wTarg <- wTarg*(1-tau) + w*tau`
-   */
-  updateTargets(tau = this._tau) {
-    const tau_t = tf.scalar(tau);
-    const q1W = this.q1!.getWeights();
-    const q2W = this.q2!.getWeights();
-    const q1WTarg = this.q1Targ!.getWeights();
-    const q2WTarg = this.q2Targ!.getWeights();
-    const len = q1W.length;
-
-    const calc = (w: tf.Tensor, wTarg: tf.Tensor) =>
-      wTarg.mul(tf.scalar(1).sub(tau_t)).add(w.mul(tau_t));
-      
-    const w1 = [], w2 = []
-    for (let i = 0; i < len; i++) {
-      w1.push(calc(q1W[i], q1WTarg[i]));
-      w2.push(calc(q2W[i], q2WTarg[i]));
-    }
-    this.q1Targ!.setWeights(w1);
-    this.q2Targ!.setWeights(w2);
   }
 
   async checkpoint() {
