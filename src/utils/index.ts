@@ -15,13 +15,7 @@ import {
   AgentSacTrainableTrainCallbackProps,
   Transition,
 } from '../@types';
-import {
-  EPSILON,
-  LOG_STD_MAX,
-  LOG_STD_MIN,
-  NAME,
-  VERSION,
-} from '../constants';
+import {EPSILON, LOG_STD_MAX, LOG_STD_MIN, VERSION} from '../constants';
 
 // https://stackoverflow.com/questions/1527803/generating-random-whole-numbers-in-javascript-in-a-specific-range
 export const getRandomInt = (min: number, max: number)  => {
@@ -47,7 +41,7 @@ export const assertScalar = (t: tf.Tensor): tf.Scalar => {
   return t as tf.Scalar;
 };
 
-export const getTrainableOnlyWeights = (layersModel: tf.LayersModel) =>
+const getTrainableOnlyWeights = (layersModel: tf.LayersModel) =>
   layersModel
     .getWeights(true /* trainableOnly */)
     .map(w => {
