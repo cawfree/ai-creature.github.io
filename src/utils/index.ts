@@ -748,37 +748,35 @@ const createAgentSacInstanceResult = ({
 };
 
 export const createAgentSacInstance = async ({
-  // TODO: force specify name
-  actorName = NAME.ACTOR,
-  agentSacProps = Object.create(null),
+  actorName,
+  agentSacProps,
 }: {
-  readonly actorName?: string;
-  readonly agentSacProps?: Partial<AgentSacConstructorProps>;
-} = Object.create(null)): Promise<AgentSacInstance> => createAgentSacInstanceResult({
+  readonly actorName: string;
+  readonly agentSacProps: Partial<AgentSacConstructorProps>;
+}): Promise<AgentSacInstance> => createAgentSacInstanceResult({
   agentSacInstanceProps: 
     await createAgentSacInstanceProps({actorName, agentSacProps}),
 });
 
 export const createAgentSacTrainableInstance = async ({
-  // TODO: force specify names
-  actorName = NAME.ACTOR,
-  agentSacProps = Object.create(null),
-  logAlphaName = NAME.ALPHA,
-  q1Name = NAME.Q1,
-  q1TargetName = NAME.Q1_TARGET,
-  q2Name = NAME.Q2,
-  q2TargetName = NAME.Q2_TARGET,
-  tau = 5e-3,
+  actorName,
+  agentSacProps,
+  logAlphaName,
+  q1Name,
+  q1TargetName,
+  q2Name,
+  q2TargetName,
+  tau,
 }: {
-  readonly actorName?: string;
-  readonly agentSacProps?: Partial<AgentSacConstructorProps>;
-  readonly logAlphaName?: string;
-  readonly q1Name?: string;
-  readonly q1TargetName?: string;
-  readonly q2Name?: string;
-  readonly q2TargetName?: string;
-  readonly tau?: number;
-} = Object.create(null)): Promise<AgentSacTrainableInstance> => {
+  readonly actorName: string;
+  readonly agentSacProps: Partial<AgentSacConstructorProps>;
+  readonly logAlphaName: string;
+  readonly q1Name: string;
+  readonly q1TargetName: string;
+  readonly q2Name: string;
+  readonly q2TargetName: string;
+  readonly tau: number;
+}): Promise<AgentSacTrainableInstance> => {
   const agentSacTrainableInstanceProps =
     await createAgentSacTrainableInstanceProps({
       actorName,

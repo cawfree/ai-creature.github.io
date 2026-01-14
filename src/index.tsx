@@ -7,7 +7,7 @@ import './index.css';
 
 import {Transition} from './@types';
 import {creature} from './examples';
-import {createAgentSacInstance} from './utils';
+import {createCreatureAgentSacInstance} from './examples/creature/utils';
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
@@ -15,7 +15,7 @@ const root = ReactDOM.createRoot(
 root.render(<React.StrictMode />);
 
 (async () => { 
-  const agentSacInstance = await createAgentSacInstance();
+  const agentSacInstance = await createCreatureAgentSacInstance();
   const worker = new Worker(new URL('./worker.ts', import.meta.url), {type: 'module'});
 
   let inited = false;

@@ -5,15 +5,16 @@ import {Transition} from './@types';
 import {ReplyBuffer} from './classes';
 import {
   assertNumericArray,
-  createAgentSacTrainableInstance,
 } from './utils';
+
+import {createCreatureAgentSacTrainableInstance} from './examples/creature/utils';
 
 const DISABLED = false
 const BATCH_SIZE_AMPLIFIER = 10;
 
 void (async () => {
 
-  const agentSacTrainableInstance = await createAgentSacTrainableInstance({
+  const agentSacTrainableInstance = await createCreatureAgentSacTrainableInstance({
     agentSacProps: {
       batchSize: 100,
     },
