@@ -71,7 +71,6 @@ const createScene = async ({
     //LIGHTS
     const light1 = new BABYLON.PointLight("light1", new BABYLON.Vector3(0, 5,-6), scene);
     const light2 = new BABYLON.PointLight("light2", new BABYLON.Vector3(6, 5, 3.5), scene);
-    const light3 = new BABYLON.DirectionalLight("light3", new BABYLON.Vector3(20, -5, 20), scene);
     light1.intensity = 15;
     light2.intensity = 5;
 
