@@ -14,21 +14,11 @@ import {
   createAgentSacTrainableInstance,
 } from '../../../utils';
 
-const sighted = true;
 const padding = 'valid';
 const kernelInitializer = 'glorotNormal';
 const biasInitializer = 'glorotNormal';
 
-const getPredictionArgs: AgentSacGetPredictionArgsCallback = ({
-  state,
-}) => {
-  if (sighted) return state;
-
-  const [v] = state;
-  assert(v);
-
-  return v;
-};
+const getPredictionArgs: AgentSacGetPredictionArgsCallback = ({state}) => state;
 
 const createConvEncoder = (inputs: tf.SymbolicTensor): tf.SymbolicTensor => { 
 
@@ -67,18 +57,17 @@ const getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback = (
   frameInputL,
   frameInputR,
   telemetryInput,
-}) => sighted
-  // TODO: This order is inconsistent, we're driving this incorrectly.
-  ? [telemetryInput, frameInputL, frameInputR]
-  : [telemetryInput];
+}) => [telemetryInput, frameInputL, frameInputR];
 
 const getActorInputTensors: AgentSacGetActorInputTensorsCallback = ({
   frameInputL,
   frameInputR,
   telemetryInput,
-}) => sighted
-  ? [createConvEncoder(frameInputL), createConvEncoder(frameInputR), telemetryInput]
-  : [telemetryInput];
+}) => [
+  telemetryInput,
+  createConvEncoder(frameInputL),
+  createConvEncoder(frameInputR),
+];
 
 export const createCreatureAgentSacInstance = ({
   // TODO: force specify name
