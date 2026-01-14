@@ -67,7 +67,11 @@ void (async () => {
 
       void agentSacTrainableInstance.train({
         transition: {
-          state: [tf.stack(telemetries), tf.stack(framesL), tf.stack(framesR)],
+          state: [
+            tf.stack(telemetries),
+            tf.stack(framesL),
+            tf.stack(framesR),
+          ],
           action: tf.stack(actions), 
           reward: tf.stack(rewards), 
           nextState: [
@@ -91,7 +95,6 @@ void (async () => {
 
       if (rb.size < agentSacTrainableInstance.batchSize * BATCH_SIZE_AMPLIFIER) continue;
 
-      console.log('Training...');
       await executeSamples();
       await new Promise(resolve => setTimeout(resolve, 240));
     }
@@ -148,9 +151,7 @@ void (async () => {
                 break
         }
     
-        if (i % (BATCH_SIZE_AMPLIFIER * agentSacTrainableInstance.batchSize) === 0) {
-          console.log('doing checkpoint');
-          void agentSacTrainableInstance.checkpoint() // timer ~ 500ms, don't await intentionally
-        }
+        if (i % (BATCH_SIZE_AMPLIFIER * agentSacTrainableInstance.batchSize) === 0)
+          void agentSacTrainableInstance.checkpoint();
     })
 })()
