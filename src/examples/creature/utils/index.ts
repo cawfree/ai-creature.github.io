@@ -1,7 +1,10 @@
 import assert from 'minimalistic-assert';
+import * as tf from '@tensorflow/tfjs';
 
 import {
   AgentSacConstructorProps,
+  AgentSacGetActorExtractModelInputsCallback,
+  AgentSacGetActorInputTensorsCallback,
   AgentSacGetPredictionArgsCallback,
   AgentSacInstance,
 } from '../../../@types';
@@ -12,6 +15,9 @@ import {
 } from '../../../utils';
 
 const sighted = true;
+const padding = 'valid';
+const kernelInitializer = 'glorotNormal';
+const biasInitializer = 'glorotNormal';
 
 const getPredictionArgs: AgentSacGetPredictionArgsCallback = ({
   state,
@@ -24,6 +30,56 @@ const getPredictionArgs: AgentSacGetPredictionArgsCallback = ({
   return v;
 };
 
+const createConvEncoder = (inputs: tf.SymbolicTensor): tf.SymbolicTensor => { 
+
+  let outputs = tf.layers.conv2d({
+    filters: 16,
+    kernelSize: 5,
+    strides: 2,
+    padding,
+    kernelInitializer,
+    biasInitializer,
+    activation: 'relu',
+    trainable: true,
+  }).apply(inputs);
+
+  outputs = tf.layers.maxPooling2d({poolSize:2}).apply(outputs);
+
+  outputs = tf.layers.conv2d({
+    filters: 16,
+    kernelSize: 3,
+    strides: 1,
+    padding,
+    kernelInitializer,
+    biasInitializer,
+    activation: 'relu',
+    trainable: true,
+  }).apply(outputs);
+
+  outputs = tf.layers.maxPooling2d({poolSize:2}).apply(outputs);
+  outputs = tf.layers.flatten().apply(outputs);
+
+  assert(outputs instanceof tf.SymbolicTensor);
+  return outputs;
+};
+
+const getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback = ({
+  frameInputL,
+  frameInputR,
+  telemetryInput,
+}) => sighted
+  // TODO: This order is inconsistent, we're driving this incorrectly.
+  ? [telemetryInput, frameInputL, frameInputR]
+  : [telemetryInput];
+
+const getActorInputTensors: AgentSacGetActorInputTensorsCallback = ({
+  frameInputL,
+  frameInputR,
+  telemetryInput,
+}) => sighted
+  ? [createConvEncoder(frameInputL), createConvEncoder(frameInputR), telemetryInput]
+  : [telemetryInput];
+
 export const createCreatureAgentSacInstance = ({
   // TODO: force specify name
   actorName = NAME.ACTOR,
@@ -35,7 +91,8 @@ export const createCreatureAgentSacInstance = ({
   actorName,
   agentSacProps,
   getPredictionArgs,
-  sighted,
+  getActorExtractModelInputs,
+  getActorInputTensors,
 });
 
 export const createCreatureAgentSacTrainableInstance = ({
@@ -60,12 +117,13 @@ export const createCreatureAgentSacTrainableInstance = ({
 } = Object.create(null)) => createAgentSacTrainableInstance({
   actorName,
   agentSacProps,
+  getActorExtractModelInputs,
+  getActorInputTensors,
   getPredictionArgs,
   logAlphaName,
   q1Name,
   q1TargetName,
   q2Name,
   q2TargetName,
-  sighted,
   tau,
 });

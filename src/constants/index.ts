@@ -1,4 +1,4 @@
-export const VERSION = 1069999999;
+export const VERSION = 106887;
 
 export const LOG_STD_MIN = -20;
 export const LOG_STD_MAX = 2;

@@ -4,6 +4,8 @@ import isEqual from 'react-fast-compare';
 
 import {
   AgentSacConstructorProps,
+  AgentSacGetActorExtractModelInputsCallback,
+  AgentSacGetActorInputTensorsCallback,
   AgentSacGetPredictionArgsCallback,
   AgentSacInstance,
   AgentSacInstanceProps,
@@ -40,6 +42,11 @@ export const assertShape = (tensor: tf.Tensor, shape: readonly number[]) =>
 export const assertScalar = (t: tf.Tensor): tf.Scalar => {
   assert(t.rank === 0);
   return t as tf.Scalar;
+};
+
+const maybeConcatenateTensors = (t: tf.SymbolicTensor[]) => {
+  assert(Array.isArray(t));
+  return t.length > 1 ? tf.layers.concatenate().apply(t) : t;
 };
 
 const getTrainableOnlyWeights = (layersModel: tf.LayersModel) =>
@@ -92,7 +99,6 @@ export const sampleActionFrom = ({
   readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
   readonly state: tf.Tensor[];
 }): [pi: tf.Tensor, logPi: tf.Tensor] => tf.tidy(() => {
-  // sighted ? state : state[0]
   const prediction = actor.predict(getPredictionArgs({state}), {batchSize});
   assert(Array.isArray(prediction));
 
@@ -114,67 +120,29 @@ export const sampleActionFrom = ({
   return [pi, logPi];
 });
 
-const createConvEncoder = (inputs: tf.SymbolicTensor): tf.SymbolicTensor => {
-  const padding = 'valid';
-  const kernelInitializer = 'glorotNormal';
-  const biasInitializer = 'glorotNormal';
-
-  let outputs = tf.layers.conv2d({
-    filters: 16,
-    kernelSize: 5,
-    strides: 2,
-    padding,
-    kernelInitializer,
-    biasInitializer,
-    activation: 'relu',
-    trainable: true,
-  }).apply(inputs);
-
-  outputs = tf.layers.maxPooling2d({poolSize:2}).apply(outputs);
-
-  outputs = tf.layers.conv2d({
-    filters: 16,
-    kernelSize: 3,
-    strides: 1,
-    padding,
-    kernelInitializer,
-    biasInitializer,
-    activation: 'relu',
-    trainable: true,
-  }).apply(outputs);
-
-  outputs = tf.layers.maxPooling2d({poolSize:2}).apply(outputs);
-  outputs = tf.layers.flatten().apply(outputs);
-
-  assert(outputs instanceof tf.SymbolicTensor);
-  return outputs;
-};
-
 export const createActor = async ({
   frameInputL,
   frameInputR,
+  getActorExtractModelInputs,
+  getActorInputTensors,
   nActions,
   name,
-  sighted,
   telemetryInput,
 }: {
   readonly frameInputL: tf.SymbolicTensor;
   readonly frameInputR: tf.SymbolicTensor;
+  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback;
+  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback;
   readonly nActions: number;
   readonly name: string;
-  readonly sighted: boolean;
   readonly telemetryInput: tf.SymbolicTensor;
 }) => {
-  let outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(
-    sighted
-      ? tf.layers.concatenate().apply([
-          createConvEncoder(frameInputL),
-          createConvEncoder(frameInputR),
-          telemetryInput,
-        ])
-      : telemetryInput
+  
+  let outputs = tf.layers.dense({ units: 256, activation: 'relu' }).apply(
+    maybeConcatenateTensors(
+      getActorInputTensors({frameInputL, frameInputR, telemetryInput}),
+    ),
   );
-
   outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs);
 
   const mu = tf.layers.dense({units: nActions}).apply(outputs);
@@ -183,11 +151,9 @@ export const createActor = async ({
   assert(mu instanceof tf.SymbolicTensor && logStd instanceof tf.SymbolicTensor);
 
   return tf.model({
-    inputs: sighted
-      ? [telemetryInput, frameInputL, frameInputR]
-      : [telemetryInput],
-      outputs: [mu, logStd],
-      name,
+    inputs: getActorExtractModelInputs({frameInputL, frameInputR, telemetryInput}),
+    outputs: [mu, logStd],
+    name,
   });
 };
 
@@ -195,28 +161,27 @@ export const createCritic = async ({
   actionInput,
   frameInputL,
   frameInputR,
+  getActorExtractModelInputs,
+  getActorInputTensors,
   name,
-  sighted,
   telemetryInput,
 }: {
   readonly actionInput: tf.SymbolicTensor;
   readonly frameInputL: tf.SymbolicTensor;
   readonly frameInputR: tf.SymbolicTensor;
+  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback;
+  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback;
   readonly name: string;
-  readonly sighted: boolean;
   readonly telemetryInput: tf.SymbolicTensor;
 }): Promise<tf.LayersModel> => {
-  const base = tf.layers.concatenate().apply([telemetryInput, actionInput]);
-  assert(base instanceof tf.SymbolicTensor);
+  const inputTensors = getActorInputTensors({
+    frameInputL,
+    frameInputR,
+    telemetryInput,
+  });
 
   let outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(
-    sighted
-      ? tf.layers.concatenate().apply([
-          createConvEncoder(frameInputL),
-          createConvEncoder(frameInputR),
-          base,
-        ])
-      : base
+    tf.layers.concatenate().apply([...inputTensors, actionInput]),
   );
 
   outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs);
@@ -224,10 +189,14 @@ export const createCritic = async ({
 
   assert(outputs instanceof tf.SymbolicTensor);
 
+  const modelInputs = getActorExtractModelInputs({
+    frameInputL,
+    frameInputR,
+    telemetryInput,
+  });
+
   const model = tf.model({
-    inputs: sighted 
-      ? [telemetryInput, frameInputL, frameInputR, actionInput] 
-      : [telemetryInput, actionInput],
+    inputs: [...modelInputs, actionInput],
     outputs,
     name,
   });
@@ -247,11 +216,13 @@ const createAgentSacInstanceProps = async ({
     gamma = 0.99, // Discount factor (γ)
     rewardScale = 10,
   },
-  sighted,
+  getActorExtractModelInputs,
+  getActorInputTensors
 }: {
   readonly actorName: string;
   readonly agentSacProps: Partial<AgentSacConstructorProps>;
-  readonly sighted: boolean;
+  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback;
+  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback;
 }): Promise<AgentSacInstanceProps> => {
   const frameStackShape = [...frameShape.slice(0, 2), frameShape[2] * nFrames] as [number, number, number];
 
@@ -267,8 +238,9 @@ const createAgentSacInstanceProps = async ({
       frameInputR,
       nActions,
       name: actorName,
-      sighted,
       telemetryInput,
+      getActorExtractModelInputs,
+      getActorInputTensors,
     })
   );
 
@@ -304,26 +276,33 @@ const createLogAlpha = ({
 const createAgentSacTrainableInstanceProps = async ({ 
   actorName,
   agentSacProps,
+  getActorExtractModelInputs,
+  getActorInputTensors,
   logAlphaName,
   q1Name,
   q1TargetName,
   q2Name,
   q2TargetName,
-  sighted,
   tau,
 }: {
   readonly actorName: string;
   readonly agentSacProps: Partial<AgentSacConstructorProps>;
+  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback;
+  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback;
   readonly logAlphaName: string;
   readonly q1Name: string;
   readonly q1TargetName: string;
   readonly q2Name: string;
   readonly q2TargetName: string;
-  readonly sighted: boolean;
   readonly tau: number;
 }): Promise<AgentSacTrainableInstanceProps> => {
   const agentSacInstanceProps =
-    await createAgentSacInstanceProps({actorName, agentSacProps, sighted});
+    await createAgentSacInstanceProps({
+      actorName,
+      agentSacProps,
+      getActorExtractModelInputs,
+      getActorInputTensors,
+    });
   
   const {
     actor,
@@ -346,8 +325,9 @@ const createAgentSacTrainableInstanceProps = async ({
       actionInput,
       frameInputL,
       frameInputR,
+      getActorExtractModelInputs,
+      getActorInputTensors,
       name: criticName,
-      sighted,
       telemetryInput,
     });
   };
@@ -516,7 +496,6 @@ const trainActor = ({
   nActions,
   q1,
   q2,
-  //sighted,
   state,
 }: {
   readonly actor: tf.LayersModel;
@@ -527,7 +506,6 @@ const trainActor = ({
   readonly nActions: number;
   readonly q1: tf.LayersModel;
   readonly q2: tf.LayersModel;
-  //readonly sighted: boolean;
   readonly state: tf.Tensor[];
 }) => {
   // TODO: consider delayed update of policy and targets (if possible)
@@ -581,7 +559,6 @@ const trainCritics = ({
   q2Optimizer,
   q2Targ,
   rewardScale,
-  //sighted,
   transition: {state, action, reward, nextState},
 }: {
   readonly actor: tf.LayersModel;
@@ -597,7 +574,6 @@ const trainCritics = ({
   readonly q2Optimizer: tf.Optimizer;
   readonly q2Targ: tf.LayersModel;
   readonly rewardScale: number;
-  //readonly sighted: boolean;
   readonly transition: Omit<Transition, 'id' | 'priority'>;
 }) => {
   const getQLossFunction = (() => {
@@ -672,7 +648,6 @@ const trainAgentSac = ({
   q2Optimizer,
   q2Targ,
   rewardScale,
-  sighted,
   targetEntropy,
   tau,
   transition,
@@ -694,7 +669,6 @@ const trainAgentSac = ({
   readonly q2Optimizer: tf.Optimizer;
   readonly q2Targ: tf.LayersModel;
   readonly rewardScale: number;
-  readonly sighted: boolean;
   readonly targetEntropy: number;
   readonly tau: number;
   readonly transition: Omit<Transition, 'id' | 'priority'>;
@@ -771,52 +745,62 @@ const createAgentSacInstanceResult = ({
 export const createAgentSacInstance = async ({
   actorName,
   agentSacProps,
+  getActorExtractModelInputs,
+  getActorInputTensors,
   getPredictionArgs,
-  sighted,
 }: {
   readonly actorName: string;
   readonly agentSacProps: Partial<AgentSacConstructorProps>;
+  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback;
+  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback;
   readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
-  readonly sighted: boolean;
 }): Promise<AgentSacInstance> => createAgentSacInstanceResult({
   agentSacInstanceProps: 
-    await createAgentSacInstanceProps({actorName, agentSacProps, sighted}),
+    await createAgentSacInstanceProps({
+      actorName,
+      agentSacProps,
+      getActorExtractModelInputs,
+      getActorInputTensors,
+    }),
   getPredictionArgs,
 });
 
 export const createAgentSacTrainableInstance = async ({
   actorName,
   agentSacProps,
+  getActorExtractModelInputs,
+  getActorInputTensors,
   getPredictionArgs,
   logAlphaName,
   q1Name,
   q1TargetName,
   q2Name,
   q2TargetName,
-  sighted,
   tau,
 }: {
   readonly actorName: string;
   readonly agentSacProps: Partial<AgentSacConstructorProps>;
+  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback;
+  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback;
   readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
   readonly logAlphaName: string;
   readonly q1Name: string;
   readonly q1TargetName: string;
   readonly q2Name: string;
   readonly q2TargetName: string;
-  readonly sighted: boolean;
   readonly tau: number;
 }): Promise<AgentSacTrainableInstance> => {
   const agentSacTrainableInstanceProps =
     await createAgentSacTrainableInstanceProps({
       actorName,
       agentSacProps,
+      getActorExtractModelInputs,
+      getActorInputTensors,
       logAlphaName,
       q1Name,
       q1TargetName,
       q2Name,
       q2TargetName,
-      sighted,
       tau,
     });
 
@@ -836,7 +820,6 @@ export const createAgentSacTrainableInstance = async ({
   }: AgentSacTrainableTrainCallbackProps) => trainAgentSac({
     ...agentSacTrainableInstanceProps,
     getPredictionArgs,
-    sighted,
     transition,
   });
 

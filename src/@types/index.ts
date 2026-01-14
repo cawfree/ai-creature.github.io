@@ -1,5 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 
+export type TensorLike = tf.Tensor<tf.Rank> | tf.Tensor<tf.Rank>[] | tf.SymbolicTensor | tf.SymbolicTensor[];
+
 export type Transition = {
   readonly id: number;
   // TODO: maybe declare separately?
@@ -97,3 +99,21 @@ export type AgentSacGetPredictionArgsCallbackProps = {
 export type AgentSacGetPredictionArgsCallback = (
   props: AgentSacGetPredictionArgsCallbackProps
 ) => tf.Tensor[] | tf.Tensor;
+
+export type AgentSacGetActorInputTensorsCallbackProps = {
+  readonly frameInputL: tf.SymbolicTensor;
+  readonly frameInputR: tf.SymbolicTensor;
+  readonly telemetryInput: tf.SymbolicTensor;
+};
+
+export type AgentSacGetActorInputTensorsCallback =
+  (props: AgentSacGetActorInputTensorsCallbackProps) => tf.SymbolicTensor[];
+
+export type AgentSacGetActorExtractModelInputsCallbackProps = {
+  readonly frameInputL: tf.SymbolicTensor;
+  readonly frameInputR: tf.SymbolicTensor;
+  readonly telemetryInput: tf.SymbolicTensor;
+};
+
+export type AgentSacGetActorExtractModelInputsCallback =
+  (props: AgentSacGetActorExtractModelInputsCallbackProps) => tf.SymbolicTensor[];
