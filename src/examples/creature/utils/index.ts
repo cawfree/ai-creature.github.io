@@ -1,5 +1,8 @@
+import assert from 'minimalistic-assert';
+
 import {
   AgentSacConstructorProps,
+  AgentSacGetPredictionArgsCallback,
   AgentSacInstance,
 } from '../../../@types';
 import {NAME} from '../../../constants';
@@ -7,6 +10,19 @@ import {
   createAgentSacInstance,
   createAgentSacTrainableInstance,
 } from '../../../utils';
+
+const sighted = true;
+
+const getPredictionArgs: AgentSacGetPredictionArgsCallback = ({
+  state,
+}) => {
+  if (sighted) return state;
+
+  const [v] = state;
+  assert(v);
+
+  return v;
+};
 
 export const createCreatureAgentSacInstance = ({
   // TODO: force specify name
@@ -18,6 +34,8 @@ export const createCreatureAgentSacInstance = ({
 } = Object.create(null)): Promise<AgentSacInstance> => createAgentSacInstance({
   actorName,
   agentSacProps,
+  getPredictionArgs,
+  sighted,
 });
 
 export const createCreatureAgentSacTrainableInstance = ({
@@ -42,10 +60,12 @@ export const createCreatureAgentSacTrainableInstance = ({
 } = Object.create(null)) => createAgentSacTrainableInstance({
   actorName,
   agentSacProps,
+  getPredictionArgs,
   logAlphaName,
   q1Name,
   q1TargetName,
   q2Name,
   q2TargetName,
+  sighted,
   tau,
 });

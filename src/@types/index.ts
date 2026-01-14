@@ -21,9 +21,6 @@ export type AgentSacConstructorProps = {
   readonly nTelemetry: number;
   // Discount factor (γ)
   readonly gamma: number;
-  // Whether the actor is trainable
-  // for tests
-  readonly sighted: boolean;
   readonly rewardScale: number;
 };
 
@@ -93,3 +90,10 @@ export type AgentSacTrainableInstance =
     readonly train: AgentSacTrainableTrainCallback;
   };
 
+export type AgentSacGetPredictionArgsCallbackProps = {
+  readonly state: tf.Tensor[];
+};
+
+export type AgentSacGetPredictionArgsCallback = (
+  props: AgentSacGetPredictionArgsCallbackProps
+) => tf.Tensor[] | tf.Tensor;

@@ -14,11 +14,12 @@ const BATCH_SIZE_AMPLIFIER = 10;
 
 void (async () => {
 
-  const agentSacTrainableInstance = await createCreatureAgentSacTrainableInstance({
-    agentSacProps: {
-      batchSize: 100,
-    },
-  });
+  const agentSacTrainableInstance =
+    await createCreatureAgentSacTrainableInstance({
+      agentSacProps: {
+        batchSize: 100,
+      },
+    });
 
   // eslint-disable-next-line no-restricted-globals
   self.postMessage({
