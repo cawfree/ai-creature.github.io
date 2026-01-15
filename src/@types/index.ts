@@ -14,7 +14,6 @@ export type Transition = {
 
 export type AgentSacConstructorProps = {
   readonly batchSize: number;
-  readonly frameStackShape: [number, number, number];
   // 3 - impuls, 3 - RGB color
   readonly nActions: number;
   // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
@@ -30,7 +29,6 @@ export type AgentSacInstanceProps<TensorsIn extends SymbolicTensors> =
     readonly actor: tf.LayersModel; 
     readonly tensorsIn: TensorsIn;
     readonly targetEntropy: number;
-    readonly frameStackShape: [number, number, number];
   };
 
 export type AgentSacTrainableInstanceProps<TensorsIn extends SymbolicTensors> =
@@ -68,7 +66,6 @@ export type AgentSacInstance = {
   // TODO: Shouldn't expose this, use high-level writers.
   readonly actor: tf.LayersModel; 
   readonly batchSize: number;
-  readonly frameStackShape: [number, number, number];
   readonly nActions: number;
   readonly nTelemetry: number;
   readonly sampleAction: AgentSacSampleActionCallback;
@@ -123,7 +120,6 @@ export type AgentSacGetActorExtractModelInputsCallback<
 
 export type AgentSacGetActorCreateTensorsInCallbackProps = {
   // TODO: shouldn't be here
-  readonly frameStackShape: [number, number, number];
   readonly nTelemetry: number;
 };
 

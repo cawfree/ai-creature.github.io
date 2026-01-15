@@ -199,7 +199,6 @@ const createAgentSacInstanceProps = async <
   actorName,
   agentSacProps: {
     batchSize = 1, 
-    frameStackShape = [25, 25, 3], 
     nActions = 3, // 3 - impuls, 3 - RGB color
     nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
     gamma = 0.99, // Discount factor (γ)
@@ -220,7 +219,6 @@ const createAgentSacInstanceProps = async <
 
   const tensorsIn = getActorCreateTensorsIn({
     // TODO: remove these props
-    frameStackShape,
     nTelemetry,
   });
 
@@ -240,7 +238,6 @@ const createAgentSacInstanceProps = async <
     nTelemetry,
     gamma,
     rewardScale,
-    frameStackShape,
     // https://github.com/rail-berkeley/softlearning/blob/13cf187cc93d90f7c217ea2845067491c3c65464/softlearning/algorithms/sac.py#L37
     targetEntropy: -nActions,
     tensorsIn,
@@ -690,7 +687,6 @@ const createAgentSacInstanceResult = <
   const {
     actor,
     batchSize,
-    frameStackShape,
     nActions,
     nTelemetry,
   } = agentSacInstanceProps;
@@ -706,7 +702,6 @@ const createAgentSacInstanceResult = <
   return {
     actor,
     batchSize,
-    frameStackShape,
     nActions,
     nTelemetry,
     sampleAction,

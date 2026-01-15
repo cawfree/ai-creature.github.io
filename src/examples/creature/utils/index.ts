@@ -7,7 +7,6 @@ import {
   AgentSacGetActorExtractModelInputsCallback,
   AgentSacGetActorInputTensorsCallback,
   AgentSacGetPredictionArgsCallback,
-  AgentSacInstance,
 } from '../../../@types';
 import {NAME} from '../../../constants';
 import {
@@ -15,6 +14,9 @@ import {
   createAgentSacTrainableInstance,
 } from '../../../utils';
 
+import {CreatureTensorsIn} from '../@types';
+
+const frameStackShape: [number, number, number] = [25, 25, 3];
 const padding = 'valid';
 const kernelInitializer = 'glorotNormal';
 const biasInitializer = 'glorotNormal';
@@ -54,13 +56,7 @@ const createConvEncoder = (inputs: tf.SymbolicTensor): tf.SymbolicTensor => {
   return outputs;
 };
 
-export type TensorsIn = {
-  readonly frameInputL: tf.SymbolicTensor;
-  readonly frameInputR: tf.SymbolicTensor;
-  readonly telemetryInput: tf.SymbolicTensor;
-};
-
-const getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback<TensorsIn> = ({
+const getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback<CreatureTensorsIn> = ({
   tensorsIn: {
     frameInputL,
     frameInputR,
@@ -68,7 +64,7 @@ const getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback<Ten
   },
 }) => [telemetryInput, frameInputL, frameInputR];
 
-const getActorInputTensors: AgentSacGetActorInputTensorsCallback<TensorsIn> = ({
+const getActorInputTensors: AgentSacGetActorInputTensorsCallback<CreatureTensorsIn> = ({
   tensorsIn: {
     frameInputL,
     frameInputR,
@@ -80,8 +76,7 @@ const getActorInputTensors: AgentSacGetActorInputTensorsCallback<TensorsIn> = ({
   createConvEncoder(frameInputR),
 ];
 
-const getActorCreateTensorsIn: AgentSacGetActorCreateTensorsInCallback<TensorsIn> = ({
-  frameStackShape,
+const getActorCreateTensorsIn: AgentSacGetActorCreateTensorsInCallback<CreatureTensorsIn> = ({
   nTelemetry,
 }) => ({
   frameInputL: tf.input({batchShape : [null, ...frameStackShape]}),
@@ -97,23 +92,28 @@ const getActorCreateTensorsIn: AgentSacGetActorCreateTensorsInCallback<TensorsIn
 // assertShape(nextState[0], [batchSize, nTelemetry]);
 // assertShape(nextState[1], [batchSize, ...frameStackShape]);
 
-export const createCreatureAgentSacInstance = ({
+export const createCreatureAgentSacInstance = async ({
   // TODO: force specify name
   actorName = NAME.ACTOR,
   agentSacProps = Object.create(null),
 }: {
   readonly actorName?: string;
   readonly agentSacProps?: Partial<AgentSacConstructorProps>;
-} = Object.create(null)): Promise<AgentSacInstance> => createAgentSacInstance({
-  actorName,
-  agentSacProps,
-  getActorCreateTensorsIn,
-  getPredictionArgs,
-  getActorExtractModelInputs,
-  getActorInputTensors,
-});
+} = Object.create(null)) => {
+  const agentSacInstance =
+    await createAgentSacInstance({
+      actorName,
+      agentSacProps,
+      getActorCreateTensorsIn,
+      getPredictionArgs,
+      getActorExtractModelInputs,
+      getActorInputTensors,
+    });
 
-export const createCreatureAgentSacTrainableInstance = ({
+  return {...agentSacInstance, frameStackShape};
+};
+
+export const createCreatureAgentSacTrainableInstance = async ({
   // TODO: force specify names
   actorName = NAME.ACTOR,
   agentSacProps = Object.create(null),
@@ -132,17 +132,22 @@ export const createCreatureAgentSacTrainableInstance = ({
   readonly q2Name?: string;
   readonly q2TargetName?: string;
   readonly tau?: number;
-} = Object.create(null)) => createAgentSacTrainableInstance({
-  actorName,
-  agentSacProps,
-  getActorCreateTensorsIn,
-  getActorExtractModelInputs,
-  getActorInputTensors,
-  getPredictionArgs,
-  logAlphaName,
-  q1Name,
-  q1TargetName,
-  q2Name,
-  q2TargetName,
-  tau,
-});
+} = Object.create(null)) => {
+  const agentSacTrainableInstance =
+    await createAgentSacTrainableInstance({
+      actorName,
+      agentSacProps,
+      getActorCreateTensorsIn,
+      getActorExtractModelInputs,
+      getActorInputTensors,
+      getPredictionArgs,
+      logAlphaName,
+      q1Name,
+      q1TargetName,
+      q2Name,
+      q2TargetName,
+      tau,
+    });
+
+  return {...agentSacTrainableInstance, frameStackShape};
+};
