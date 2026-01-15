@@ -26,20 +26,18 @@ export type AgentSacConstructorProps = {
   readonly rewardScale: number;
 };
 
-export type AgentSacInstanceProps =
+export type AgentSacInstanceProps<TensorsIn extends SymbolicTensors> =
   & AgentSacConstructorProps
   & {
     readonly actor: tf.LayersModel; 
     readonly frameShape: readonly number[];
+    readonly tensorsIn: TensorsIn;
     readonly targetEntropy: number;
-    readonly frameInputL: tf.SymbolicTensor;
-    readonly frameInputR: tf.SymbolicTensor;
     readonly frameStackShape: [number, number, number];
-    readonly telemetryInput: tf.SymbolicTensor;
   };
 
-export type AgentSacTrainableInstanceProps =
-  & AgentSacInstanceProps
+export type AgentSacTrainableInstanceProps<TensorsIn extends SymbolicTensors> =
+  & AgentSacInstanceProps<TensorsIn>
   & {
     readonly actorOptimizer: tf.Optimizer;
     readonly actionInput: tf.SymbolicTensor;
@@ -64,6 +62,10 @@ export type AgentSacSampleActionCallback = (
 ) => [pi: tf.Tensor, logPi: tf.Tensor];
 
 export type AgentSacTrainableCheckpointCallback = () => Promise<void>;
+
+export type SymbolicTensors = {
+  readonly [key: string]: tf.SymbolicTensor,
+};
 
 export type AgentSacInstance = {
   // TODO: Shouldn't expose this, use high-level writers.
@@ -100,20 +102,37 @@ export type AgentSacGetPredictionArgsCallback = (
   props: AgentSacGetPredictionArgsCallbackProps
 ) => tf.Tensor[] | tf.Tensor;
 
-export type AgentSacGetActorInputTensorsCallbackProps = {
-  readonly frameInputL: tf.SymbolicTensor;
-  readonly frameInputR: tf.SymbolicTensor;
-  readonly telemetryInput: tf.SymbolicTensor;
+export type AgentSacGetActorInputTensorsCallbackProps<
+  TensorsIn extends SymbolicTensors
+> = {
+  readonly tensorsIn: TensorsIn;
 };
 
-export type AgentSacGetActorInputTensorsCallback =
-  (props: AgentSacGetActorInputTensorsCallbackProps) => tf.SymbolicTensor[];
+export type AgentSacGetActorInputTensorsCallback<
+  TensorsIn extends SymbolicTensors,
+> = (
+  props: AgentSacGetActorInputTensorsCallbackProps<TensorsIn>
+) => tf.SymbolicTensor[];
 
-export type AgentSacGetActorExtractModelInputsCallbackProps = {
-  readonly frameInputL: tf.SymbolicTensor;
-  readonly frameInputR: tf.SymbolicTensor;
-  readonly telemetryInput: tf.SymbolicTensor;
+export type AgentSacGetActorExtractModelInputsCallbackProps<
+  TensorsIn extends SymbolicTensors
+> = {
+  readonly tensorsIn: TensorsIn;
 };
 
-export type AgentSacGetActorExtractModelInputsCallback =
-  (props: AgentSacGetActorExtractModelInputsCallbackProps) => tf.SymbolicTensor[];
+export type AgentSacGetActorExtractModelInputsCallback<
+  TensorsIn extends SymbolicTensors,
+> = (
+  props: AgentSacGetActorExtractModelInputsCallbackProps<TensorsIn>
+) => tf.SymbolicTensor[];
+
+export type AgentSacGetActorCreateTensorsInCallbackProps = {
+  // TODO: shouldn't be here
+  readonly frameStackShape: [number, number, number];
+  readonly nTelemetry: number;
+};
+
+export type AgentSacGetActorCreateTensorsInCallback<
+  TensorsIn extends SymbolicTensors,
+> = (props: AgentSacGetActorCreateTensorsInCallbackProps) => TensorsIn;
+

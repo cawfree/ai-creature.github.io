@@ -3,6 +3,7 @@ import * as tf from '@tensorflow/tfjs';
 
 import {
   AgentSacConstructorProps,
+  AgentSacGetActorCreateTensorsInCallback,
   AgentSacGetActorExtractModelInputsCallback,
   AgentSacGetActorInputTensorsCallback,
   AgentSacGetPredictionArgsCallback,
@@ -53,21 +54,48 @@ const createConvEncoder = (inputs: tf.SymbolicTensor): tf.SymbolicTensor => {
   return outputs;
 };
 
-const getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback = ({
-  frameInputL,
-  frameInputR,
-  telemetryInput,
+export type TensorsIn = {
+  readonly frameInputL: tf.SymbolicTensor;
+  readonly frameInputR: tf.SymbolicTensor;
+  readonly telemetryInput: tf.SymbolicTensor;
+};
+
+const getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback<TensorsIn> = ({
+  tensorsIn: {
+    frameInputL,
+    frameInputR,
+    telemetryInput,
+  },
 }) => [telemetryInput, frameInputL, frameInputR];
 
-const getActorInputTensors: AgentSacGetActorInputTensorsCallback = ({
-  frameInputL,
-  frameInputR,
-  telemetryInput,
+const getActorInputTensors: AgentSacGetActorInputTensorsCallback<TensorsIn> = ({
+  tensorsIn: {
+    frameInputL,
+    frameInputR,
+    telemetryInput,
+  },
 }) => [
   telemetryInput,
   createConvEncoder(frameInputL),
   createConvEncoder(frameInputR),
 ];
+
+const getActorCreateTensorsIn: AgentSacGetActorCreateTensorsInCallback<TensorsIn> = ({
+  frameStackShape,
+  nTelemetry,
+}) => ({
+  frameInputL: tf.input({batchShape : [null, ...frameStackShape]}),
+  frameInputR: tf.input({batchShape : [null, ...frameStackShape]}),
+  telemetryInput: tf.input({batchShape : [null, nTelemetry]}),
+});
+
+// trainAgent
+// assertShape(state[0], [batchSize, nTelemetry]);
+// assertShape(state[1], [batchSize, ...frameStackShape]);
+// assertShape(action, [batchSize, nActions]);
+// assertShape(reward, [batchSize, 1]);
+// assertShape(nextState[0], [batchSize, nTelemetry]);
+// assertShape(nextState[1], [batchSize, ...frameStackShape]);
 
 export const createCreatureAgentSacInstance = ({
   // TODO: force specify name
@@ -79,6 +107,7 @@ export const createCreatureAgentSacInstance = ({
 } = Object.create(null)): Promise<AgentSacInstance> => createAgentSacInstance({
   actorName,
   agentSacProps,
+  getActorCreateTensorsIn,
   getPredictionArgs,
   getActorExtractModelInputs,
   getActorInputTensors,
@@ -106,6 +135,7 @@ export const createCreatureAgentSacTrainableInstance = ({
 } = Object.create(null)) => createAgentSacTrainableInstance({
   actorName,
   agentSacProps,
+  getActorCreateTensorsIn,
   getActorExtractModelInputs,
   getActorInputTensors,
   getPredictionArgs,

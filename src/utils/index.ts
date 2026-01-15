@@ -4,6 +4,7 @@ import isEqual from 'react-fast-compare';
 
 import {
   AgentSacConstructorProps,
+  AgentSacGetActorCreateTensorsInCallback,
   AgentSacGetActorExtractModelInputsCallback,
   AgentSacGetActorInputTensorsCallback,
   AgentSacGetPredictionArgsCallback,
@@ -16,6 +17,7 @@ import {
   AgentSacTrainableInstanceProps,
   AgentSacTrainableTrainCallback,
   AgentSacTrainableTrainCallbackProps,
+  SymbolicTensors,
   Transition,
 } from '../@types';
 import {EPSILON, LOG_STD_MAX, LOG_STD_MIN, VERSION} from '../constants';
@@ -120,28 +122,24 @@ export const sampleActionFrom = ({
   return [pi, logPi];
 });
 
-export const createActor = async ({
-  frameInputL,
-  frameInputR,
+export const createActor = async <
+  TensorsIn extends SymbolicTensors
+>({
+  tensorsIn,
   getActorExtractModelInputs,
   getActorInputTensors,
   nActions,
   name,
-  telemetryInput,
 }: {
-  readonly frameInputL: tf.SymbolicTensor;
-  readonly frameInputR: tf.SymbolicTensor;
-  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback;
-  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback;
+  readonly tensorsIn: TensorsIn;
+  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback<TensorsIn>;
+  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback<TensorsIn>;
   readonly nActions: number;
   readonly name: string;
-  readonly telemetryInput: tf.SymbolicTensor;
 }) => {
   
-  let outputs = tf.layers.dense({ units: 256, activation: 'relu' }).apply(
-    maybeConcatenateTensors(
-      getActorInputTensors({frameInputL, frameInputR, telemetryInput}),
-    ),
+  let outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(
+    maybeConcatenateTensors(getActorInputTensors({tensorsIn})),
   );
   outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs);
 
@@ -151,34 +149,28 @@ export const createActor = async ({
   assert(mu instanceof tf.SymbolicTensor && logStd instanceof tf.SymbolicTensor);
 
   return tf.model({
-    inputs: getActorExtractModelInputs({frameInputL, frameInputR, telemetryInput}),
+    inputs: getActorExtractModelInputs({tensorsIn}),
     outputs: [mu, logStd],
     name,
   });
 };
 
-export const createCritic = async ({
+export const createCritic = async <
+  TensorsIn extends SymbolicTensors
+>({
   actionInput,
-  frameInputL,
-  frameInputR,
   getActorExtractModelInputs,
   getActorInputTensors,
   name,
-  telemetryInput,
+  tensorsIn,
 }: {
   readonly actionInput: tf.SymbolicTensor;
-  readonly frameInputL: tf.SymbolicTensor;
-  readonly frameInputR: tf.SymbolicTensor;
-  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback;
-  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback;
+  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback<TensorsIn>;
+  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback<TensorsIn>;
   readonly name: string;
-  readonly telemetryInput: tf.SymbolicTensor;
+  readonly tensorsIn: TensorsIn;
 }): Promise<tf.LayersModel> => {
-  const inputTensors = getActorInputTensors({
-    frameInputL,
-    frameInputR,
-    telemetryInput,
-  });
+  const inputTensors = getActorInputTensors({tensorsIn});
 
   let outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(
     tf.layers.concatenate().apply([...inputTensors, actionInput]),
@@ -189,11 +181,7 @@ export const createCritic = async ({
 
   assert(outputs instanceof tf.SymbolicTensor);
 
-  const modelInputs = getActorExtractModelInputs({
-    frameInputL,
-    frameInputR,
-    telemetryInput,
-  });
+  const modelInputs = getActorExtractModelInputs({tensorsIn});
 
   const model = tf.model({
     inputs: [...modelInputs, actionInput],
@@ -205,7 +193,9 @@ export const createCritic = async ({
   return model;
 };
 
-const createAgentSacInstanceProps = async ({
+const createAgentSacInstanceProps = async <
+  TensorsIn extends SymbolicTensors
+>({
   actorName,
   agentSacProps: {
     batchSize = 1, 
@@ -216,29 +206,31 @@ const createAgentSacInstanceProps = async ({
     gamma = 0.99, // Discount factor (γ)
     rewardScale = 10,
   },
+  getActorCreateTensorsIn,
   getActorExtractModelInputs,
   getActorInputTensors
 }: {
   readonly actorName: string;
   readonly agentSacProps: Partial<AgentSacConstructorProps>;
-  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback;
-  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback;
-}): Promise<AgentSacInstanceProps> => {
-  const frameStackShape = [...frameShape.slice(0, 2), frameShape[2] * nFrames] as [number, number, number];
-
-  const frameInputL = tf.input({batchShape : [null, ...frameStackShape]});
-  const frameInputR = tf.input({batchShape : [null, ...frameStackShape]});
-  const telemetryInput = tf.input({batchShape : [null, nTelemetry]});
+  readonly getActorCreateTensorsIn: AgentSacGetActorCreateTensorsInCallback<TensorsIn>;
+  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback<TensorsIn>;
+  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback<TensorsIn>;
+}): Promise<AgentSacInstanceProps<TensorsIn>> => {
+  const frameStackShape = [...frameShape.slice(0, 2), frameShape[2] * nFrames] as [number, number, number]; 
       
   const maybeSavedActor = await loadModelByName(actorName);
 
+  const tensorsIn = getActorCreateTensorsIn({
+    // TODO: remove these props
+    frameStackShape,
+    nTelemetry,
+  });
+
   const actor: tf.LayersModel = maybeSavedActor ?? (
-    await createActor({
-      frameInputL,
-      frameInputR,
+    await createActor<TensorsIn>({
+      tensorsIn,
       nActions,
       name: actorName,
-      telemetryInput,
       getActorExtractModelInputs,
       getActorInputTensors,
     })
@@ -255,9 +247,7 @@ const createAgentSacInstanceProps = async ({
     frameStackShape,
     // https://github.com/rail-berkeley/softlearning/blob/13cf187cc93d90f7c217ea2845067491c3c65464/softlearning/algorithms/sac.py#L37
     targetEntropy: -nActions,
-    frameInputL,
-    frameInputR,
-    telemetryInput,
+    tensorsIn,
     actor,
   };
 };
@@ -273,9 +263,12 @@ const createLogAlpha = ({
   return model;
 };
 
-const createAgentSacTrainableInstanceProps = async ({ 
+const createAgentSacTrainableInstanceProps = async <
+  TensorsIn extends SymbolicTensors
+>({ 
   actorName,
   agentSacProps,
+  getActorCreateTensorsIn,
   getActorExtractModelInputs,
   getActorInputTensors,
   logAlphaName,
@@ -287,30 +280,26 @@ const createAgentSacTrainableInstanceProps = async ({
 }: {
   readonly actorName: string;
   readonly agentSacProps: Partial<AgentSacConstructorProps>;
-  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback;
-  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback;
+  readonly getActorCreateTensorsIn: AgentSacGetActorCreateTensorsInCallback<TensorsIn>;
+  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback<TensorsIn>;
+  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback<TensorsIn>;
   readonly logAlphaName: string;
   readonly q1Name: string;
   readonly q1TargetName: string;
   readonly q2Name: string;
   readonly q2TargetName: string;
   readonly tau: number;
-}): Promise<AgentSacTrainableInstanceProps> => {
+}): Promise<AgentSacTrainableInstanceProps<TensorsIn>> => {
   const agentSacInstanceProps =
     await createAgentSacInstanceProps({
       actorName,
       agentSacProps,
+      getActorCreateTensorsIn,
       getActorExtractModelInputs,
       getActorInputTensors,
     });
   
-  const {
-    actor,
-    frameInputL,
-    frameInputR,
-    nActions,
-    telemetryInput,
-  } = agentSacInstanceProps;
+  const {actor, nActions, tensorsIn} = agentSacInstanceProps;
 
   actor.trainable = true;
 
@@ -321,14 +310,12 @@ const createAgentSacTrainableInstanceProps = async ({
     const maybeCritic = await loadModelByName(criticName);
     if (maybeCritic) return maybeCritic;
 
-    return createCritic({
+    return createCritic<TensorsIn>({
       actionInput,
-      frameInputL,
-      frameInputR,
       getActorExtractModelInputs,
       getActorInputTensors,
       name: criticName,
-      telemetryInput,
+      tensorsIn,
     });
   };
 
@@ -635,12 +622,10 @@ const trainAgentSac = ({
   actorOptimizer,
   alphaOptimizer,
   batchSize,
-  frameStackShape,
   gamma,
   getPredictionArgs,
   logAlpha,
   nActions,
-  nTelemetry,
   q1,
   q1Optimizer,
   q1Targ,
@@ -656,12 +641,10 @@ const trainAgentSac = ({
   readonly actorOptimizer: tf.Optimizer;
   readonly alphaOptimizer: tf.Optimizer;
   readonly batchSize: number;
-  readonly frameStackShape: [number, number, number];
   readonly gamma: number;
   readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
   readonly logAlpha: tf.Variable<tf.Rank.R0>;
   readonly nActions: number;
-  readonly nTelemetry: number;
   readonly q1: tf.LayersModel;
   readonly q1Optimizer: tf.Optimizer;
   readonly q1Targ: tf.LayersModel;
@@ -673,15 +656,7 @@ const trainAgentSac = ({
   readonly tau: number;
   readonly transition: Omit<Transition, 'id' | 'priority'>;
 }) => tf.tidy(() => {
-
-  const {state, action, reward, nextState} = transition;
-  assertShape(state[0], [batchSize, nTelemetry]);
-  assertShape(state[1], [batchSize, ...frameStackShape]);
-  assertShape(action, [batchSize, nActions]);
-  assertShape(reward, [batchSize, 1]);
-  assertShape(nextState[0], [batchSize, nTelemetry]);
-  assertShape(nextState[1], [batchSize, ...frameStackShape]);
-  
+ 
   void trainCritics({
     actor,
     batchSize,
@@ -699,17 +674,21 @@ const trainAgentSac = ({
     transition,
   });
 
+  const {state} = transition; 
+
   void trainActor({actor, actorOptimizer, batchSize, getPredictionArgs, logAlpha, nActions, q1, q2, state});
   void trainAlpha({actor, alphaOptimizer, batchSize, getPredictionArgs, logAlpha, state, targetEntropy});
 
   void updateTrainableTargets({q1, q1Targ, q2, q2Targ, tau});
 });
 
-const createAgentSacInstanceResult = ({
+const createAgentSacInstanceResult = <
+  TensorsIn extends SymbolicTensors
+>({
   agentSacInstanceProps,
   getPredictionArgs,
 }: {
-  readonly agentSacInstanceProps: AgentSacInstanceProps;
+  readonly agentSacInstanceProps: AgentSacInstanceProps<TensorsIn>;
   readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
 }): AgentSacInstance => {
   const {
@@ -742,32 +721,40 @@ const createAgentSacInstanceResult = ({
   };
 };
 
-export const createAgentSacInstance = async ({
+export const createAgentSacInstance = async<
+  TensorsIn extends SymbolicTensors
+>({
   actorName,
   agentSacProps,
+  getActorCreateTensorsIn,
   getActorExtractModelInputs,
   getActorInputTensors,
   getPredictionArgs,
 }: {
   readonly actorName: string;
   readonly agentSacProps: Partial<AgentSacConstructorProps>;
-  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback;
-  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback;
+  readonly getActorCreateTensorsIn: AgentSacGetActorCreateTensorsInCallback<TensorsIn>;
+  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback<TensorsIn>;
+  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback<TensorsIn>;
   readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
 }): Promise<AgentSacInstance> => createAgentSacInstanceResult({
   agentSacInstanceProps: 
     await createAgentSacInstanceProps({
       actorName,
       agentSacProps,
+      getActorCreateTensorsIn,
       getActorExtractModelInputs,
       getActorInputTensors,
     }),
   getPredictionArgs,
 });
 
-export const createAgentSacTrainableInstance = async ({
+export const createAgentSacTrainableInstance = async <
+  TensorsIn extends SymbolicTensors
+>({
   actorName,
   agentSacProps,
+  getActorCreateTensorsIn,
   getActorExtractModelInputs,
   getActorInputTensors,
   getPredictionArgs,
@@ -780,8 +767,9 @@ export const createAgentSacTrainableInstance = async ({
 }: {
   readonly actorName: string;
   readonly agentSacProps: Partial<AgentSacConstructorProps>;
-  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback;
-  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback;
+  readonly getActorCreateTensorsIn: AgentSacGetActorCreateTensorsInCallback<TensorsIn>;
+  readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback<TensorsIn>;
+  readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback<TensorsIn>;
   readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
   readonly logAlphaName: string;
   readonly q1Name: string;
@@ -794,6 +782,7 @@ export const createAgentSacTrainableInstance = async ({
     await createAgentSacTrainableInstanceProps({
       actorName,
       agentSacProps,
+      getActorCreateTensorsIn,
       getActorExtractModelInputs,
       getActorInputTensors,
       logAlphaName,
