@@ -255,12 +255,12 @@ export const createCreatureEngine = async ({
   }) => {
     void frameStack.push(await Promise.all([
       BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraLeft, {
-        height: agentSacInstance.frameShape[0],
-        width: agentSacInstance.frameShape[1],
+        height: agentSacInstance.frameStackShape[0],
+        width: agentSacInstance.frameStackShape[1],
       }),
       BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraRight, {
-        height: agentSacInstance.frameShape[0],
-        width: agentSacInstance.frameShape[1],
+        height: agentSacInstance.frameStackShape[0],
+        width: agentSacInstance.frameStackShape[1],
       }),
     ]));
 

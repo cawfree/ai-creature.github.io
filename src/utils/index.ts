@@ -199,7 +199,7 @@ const createAgentSacInstanceProps = async <
   actorName,
   agentSacProps: {
     batchSize = 1, 
-    frameShape = [25, 25, 3], 
+    frameStackShape = [25, 25, 3], 
     nActions = 3, // 3 - impuls, 3 - RGB color
     nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
     gamma = 0.99, // Discount factor (γ)
@@ -215,7 +215,6 @@ const createAgentSacInstanceProps = async <
   readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback<TensorsIn>;
   readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback<TensorsIn>;
 }): Promise<AgentSacInstanceProps<TensorsIn>> => {
-  const frameStackShape = frameShape as [number, number, number]; 
       
   const maybeSavedActor = await loadModelByName(actorName);
 
@@ -237,7 +236,6 @@ const createAgentSacInstanceProps = async <
 
   return {
     batchSize,
-    frameShape,
     nActions,
     nTelemetry,
     gamma,
@@ -692,7 +690,6 @@ const createAgentSacInstanceResult = <
   const {
     actor,
     batchSize,
-    frameShape,
     frameStackShape,
     nActions,
     nTelemetry,
@@ -709,7 +706,6 @@ const createAgentSacInstanceResult = <
   return {
     actor,
     batchSize,
-    frameShape,
     frameStackShape,
     nActions,
     nTelemetry,
