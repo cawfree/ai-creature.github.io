@@ -264,8 +264,8 @@ export const createCreatureEngine = async ({
       }),
     ]));
 
-    if (frameStack.length < agentSacInstance.nFrames) return;
-    assert(frameStack.length === agentSacInstance.nFrames);
+    if (!frameStack.length) return;
+    assert(frameStack.length === 1);
 
     const imgs = await Promise.all(frameStack.flat().map(base64ToImg))
 

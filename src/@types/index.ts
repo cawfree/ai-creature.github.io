@@ -15,8 +15,6 @@ export type Transition = {
 export type AgentSacConstructorProps = {
   readonly batchSize: number;
   readonly frameShape: readonly number[];
-  // Number of stacked frames per state
-  readonly nFrames: number;
   // 3 - impuls, 3 - RGB color
   readonly nActions: number;
   // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
@@ -74,7 +72,6 @@ export type AgentSacInstance = {
   readonly frameShape: readonly number[];
   readonly frameStackShape: [number, number, number];
   readonly nActions: number;
-  readonly nFrames: number;
   readonly nTelemetry: number;
   readonly sampleAction: AgentSacSampleActionCallback;
 };
