@@ -12,63 +12,18 @@ html, body {
   touch-action: none;
 }
 
-#testCanvas0 {
+#frameLeft {
   position:absolute;
-  width: 128px;
-  height: 128px;
-  right:600px;
-  bottom: 0;
-}
-
-#testCanvas1 {
-  position:absolute;
-  width: 128px;
-  height: 128px;
-  right:450px;
-  bottom: 0;
-}
-
-#testCanvas2 {
-  position:absolute;
-  width: 128px;
-  height: 128px;
-  right: 300px;
-  bottom: 0;
-}
-
-#testCanvas3 {
-  position: absolute;
   width: 128px;
   height: 128px;
   right: 150px;
   bottom: 0;
 }
 
-#testCanvas4 {
+#frameRight {
   position: absolute;
   width: 128px;
   height: 128px;
   right: 0px;
   bottom: 0;
-}
-
-.vote {
-  position: absolute;
-  width: 60px;
-  height: 60px;
-  right: 10px;
-}
-
-.vote:hover {
-  cursor: pointer;
-}
-
-#like {
-  bottom: 200px;
-}
-
-#dislike {
-  bottom: 120px;
-  -webkit-transform: scaleX(-1);
-  transform: scaleX(-1);
 }

@@ -11,14 +11,6 @@ const createDefaultEngine = () => new BABYLON.Engine(canvas, true, {
   disableWebGL2Support: false
 })
 
-document.getElementById('like').addEventListener('click', () => (
-  window.reward = 1
-));
-
-document.getElementById('dislike').addEventListener('click', () => {
-  window.reward = -1
-});
-
 const base64ToImg = (base64: string) => new Promise((resolve) => {
   const img = new Image()
   img.src = base64
@@ -253,7 +245,10 @@ export const createCreatureEngine = async ({
     crCameraRight,
   }) => {
 
-    const base64s = await Promise.all([
+    const [
+      base64Left,
+      base64Right,
+    ] = await Promise.all([
       BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraLeft, {
         height: agentSacInstance.frameStackShape[0],
         width: agentSacInstance.frameStackShape[1],
@@ -264,22 +259,22 @@ export const createCreatureEngine = async ({
       }),
     ]);
 
-    const imgs =
-      await Promise.all(base64s.map(base64ToImg));
+    const [imageLeft, imageRight] = await Promise.all([
+      base64ToImg(base64Left),
+      base64ToImg(base64Right),
+    ]);
 
     const framesNorm = tf.tidy(() => {
-      const imgTensors = imgs
-        .map(img => tf.browser.fromPixels(img))
-        .map((t, i) => {
-          const canv = document.getElementById('testCanvas' + (i+3))
-          if (canv) tf.browser.toPixels(t, canv);
+      const imageLeftPixels = tf.browser.fromPixels(imageLeft);
+      const imageRightPixels = tf.browser.fromPixels(imageRight);
 
-          return t.sub(255/2).div(255/2);
-        });
+      tf.browser.toPixels(imageLeftPixels, document.getElementById('frameLeft'));
+      tf.browser.toPixels(imageRightPixels, document.getElementById('frameRight'));
 
-      const resL = tf.concat(imgTensors.filter((el, i) => i%2==0), -1)
-      const resR = tf.concat(imgTensors.filter((el, i) => i%2==1), -1)
-      return [resL, resR];
+      return [
+        tf.concat([imageLeftPixels.sub(255/2).div(255/2)], -1) /* resL */,
+        tf.concat([imageRightPixels.sub(255/2).div(255/2)], -1) /* resR */,
+      ];
     });
 
     const framesBatch = framesNorm.map(fr => tf.stack([fr]))
@@ -323,7 +318,11 @@ export const createCreatureEngine = async ({
     }); // timer ~5ms
 
     // TODO: !!!!!await find the way to avoid framesNorm.array()
-    const [framesArrL, framesArrR,[actionArr]] = await Promise.all([...(framesNorm.map(fr => fr.array())), action.array()]) // action come as a batch of size 1
+    const [framesArrL, framesArrR, [actionArr]] =
+      await Promise.all([
+        ...(framesNorm.map(fr => fr.array())),
+        action.array(),
+      ]); // action come as a batch of size 1
 
     const impulse = actionArr.slice(0, 3);
     assert(actionArr.length === 3, actionArr.length)
