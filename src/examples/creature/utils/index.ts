@@ -79,9 +79,9 @@ const getActorInputTensors: AgentSacGetActorInputTensorsCallback<CreatureTensors
 ];
 
 const getActorCreateTensorsIn: AgentSacGetActorCreateTensorsInCallback<CreatureTensorsIn> = () => ({
+  telemetryInput: tf.input({batchShape : [null, nTelemetry]}),
   frameInputL: tf.input({batchShape : [null, ...frameStackShape]}),
   frameInputR: tf.input({batchShape : [null, ...frameStackShape]}),
-  telemetryInput: tf.input({batchShape : [null, nTelemetry]}),
 });
 
 // trainAgent

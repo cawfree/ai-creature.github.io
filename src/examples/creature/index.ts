@@ -264,7 +264,10 @@ export const createCreatureEngine = async ({
       base64ToImg(base64Right),
     ]);
 
-    const framesNorm = tf.tidy(() => {
+    const [
+      imageLeftPixelsNorm,
+      imageRightPixelsNorm,
+    ] = tf.tidy(() => {
       const imageLeftPixels = tf.browser.fromPixels(imageLeft);
       const imageRightPixels = tf.browser.fromPixels(imageRight);
 
@@ -277,7 +280,8 @@ export const createCreatureEngine = async ({
       ];
     });
 
-    const framesBatch = framesNorm.map(fr => tf.stack([fr]))
+    const imageLeftFrame = tf.stack([imageLeftPixelsNorm]);
+    const imageRightFrame = tf.stack([imageRightPixelsNorm]);
 
     const delta = (Date.now() - timer) / 1000 // sec
     const linearVelocity = creature.impostor.getLinearVelocity()
@@ -314,15 +318,13 @@ export const createCreatureEngine = async ({
     window.onCollide = undefined
     const telemetryBatch = tf.tensor(telemetry, [1, agentSacInstance.nTelemetry])
     const [action] = agentSacInstance.sampleAction({
-      state: [telemetryBatch, ...framesBatch],
+      state: [telemetryBatch, imageLeftFrame, imageRightFrame],
     }); // timer ~5ms
 
     // TODO: !!!!!await find the way to avoid framesNorm.array()
+    // action come as a batch of size 1
     const [framesArrL, framesArrR, [actionArr]] =
-      await Promise.all([
-        ...(framesNorm.map(fr => fr.array())),
-        action.array(),
-      ]); // action come as a batch of size 1
+      await Promise.all([imageLeftPixelsNorm.array(), imageRightPixelsNorm.array(), action.array()]);
 
     const impulse = actionArr.slice(0, 3);
     assert(actionArr.length === 3, actionArr.length)
@@ -365,8 +367,10 @@ export const createCreatureEngine = async ({
     if (transitions.length === TRANSITIONS_BUFFER_SIZE)
       void onTransitionPublished(transitions.shift());
 
-    framesNorm.map(fr => fr.dispose());
-    framesBatch.map(fr => fr.dispose());
+    imageLeftPixelsNorm.dispose();
+    imageRightPixelsNorm.dispose();
+    imageLeftFrame.dispose();
+    imageRightFrame.dispose();
     telemetryBatch.dispose();
     action.dispose();
   };
