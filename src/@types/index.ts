@@ -2,10 +2,26 @@ import * as tf from '@tensorflow/tfjs';
 
 export type TensorLike = tf.Tensor<tf.Rank> | tf.Tensor<tf.Rank>[] | tf.SymbolicTensor | tf.SymbolicTensor[];
 
+// TODO: Add some extractor.
+// TODO: Refactor this.
+export type State = [
+  telemetry: tf.Tensor1D,
+  frameL: tf.Tensor3D,
+  frameR: tf.Tensor3D,
+];
+
 export type Transition = {
   readonly id: number;
   // TODO: maybe declare separately?
   readonly priority?: number;
+  readonly state: State;
+  readonly nextState: State;
+  readonly action: tf.Tensor;
+  readonly reward: tf.Tensor;
+};
+
+// TODO: this is stacked state
+export type VectorizedTransitions = {
   readonly state: tf.Tensor[];
   readonly nextState: tf.Tensor[];
   readonly action: tf.Tensor;
@@ -16,8 +32,6 @@ export type AgentSacConstructorProps = {
   readonly batchSize: number;
   // 3 - impuls, 3 - RGB color
   readonly nActions: number;
-  // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
-  readonly nTelemetry: number;
   // Discount factor (γ)
   readonly gamma: number;
   readonly rewardScale: number;
@@ -67,12 +81,11 @@ export type AgentSacInstance = {
   readonly actor: tf.LayersModel; 
   readonly batchSize: number;
   readonly nActions: number;
-  readonly nTelemetry: number;
   readonly sampleAction: AgentSacSampleActionCallback;
 };
 
 export type AgentSacTrainableTrainCallbackProps = {
-  readonly transition: Omit<Transition, 'id' | 'priority'>;
+  readonly transitions: readonly Omit<Transition, 'id' | 'priority'>[];
 };
 
 export type AgentSacTrainableTrainCallback = (
@@ -118,10 +131,7 @@ export type AgentSacGetActorExtractModelInputsCallback<
   props: AgentSacGetActorExtractModelInputsCallbackProps<TensorsIn>
 ) => tf.SymbolicTensor[];
 
-export type AgentSacGetActorCreateTensorsInCallbackProps = {
-  // TODO: shouldn't be here
-  readonly nTelemetry: number;
-};
+export type AgentSacGetActorCreateTensorsInCallbackProps = {};
 
 export type AgentSacGetActorCreateTensorsInCallback<
   TensorsIn extends SymbolicTensors,

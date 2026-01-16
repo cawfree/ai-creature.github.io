@@ -3,9 +3,7 @@ import assert from 'minimalistic-assert';
 
 import {Transition} from './@types';
 import {ReplyBuffer} from './classes';
-import {
-  assertNumericArray,
-} from './utils';
+import {assertNumericArray} from './utils';
 
 import {createCreatureAgentSacTrainableInstance} from './examples/creature/utils';
 
@@ -42,47 +40,7 @@ void (async () => {
     assert(samples.length === agentSacTrainableInstance.batchSize); 
     
     tf.tidy(() => {
-      const framesL: tf.Tensor[] = [];
-      const framesR: tf.Tensor[] = [];
-      const telemetries: tf.Tensor[] = [];
-      const actions: tf.Tensor[] = [];
-      const rewards: tf.Tensor[] = [];
-      const nextFramesL: tf.Tensor[] = [];
-      const nextFramesR: tf.Tensor[] = [];
-      const nextTelemetries: tf.Tensor[] = [];
-    
-      for (const {
-        state: [telemetry, frameL, frameR], 
-        action, 
-        reward, 
-        nextState: [nextTelemetry, nextFrameL, nextFrameR] 
-      } of samples) {
-        framesL.push(frameL);
-        framesR.push(frameR);
-        telemetries.push(telemetry);
-        actions.push(action);
-        rewards.push(reward);
-        nextFramesL.push(nextFrameL);
-        nextFramesR.push(nextFrameR);
-        nextTelemetries.push(nextTelemetry);
-      }
-
-      void agentSacTrainableInstance.train({
-        transition: {
-          state: [
-            tf.stack(telemetries),
-            tf.stack(framesL),
-            tf.stack(framesR),
-          ],
-          action: tf.stack(actions), 
-          reward: tf.stack(rewards), 
-          nextState: [
-            tf.stack(nextTelemetries),
-            tf.stack(nextFramesL),
-            tf.stack(nextFramesR),
-          ],
-        },
-      });
+      void agentSacTrainableInstance.train({transitions: samples});
     }); 
 
     // eslint-disable-next-line no-restricted-globals

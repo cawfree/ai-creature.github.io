@@ -19,6 +19,7 @@ import {
   AgentSacTrainableTrainCallbackProps,
   SymbolicTensors,
   Transition,
+  VectorizedTransitions,
 } from '../@types';
 import {EPSILON, LOG_STD_MAX, LOG_STD_MIN, VERSION} from '../constants';
 
@@ -200,7 +201,6 @@ const createAgentSacInstanceProps = async <
   agentSacProps: {
     batchSize = 1, 
     nActions = 3, // 3 - impuls, 3 - RGB color
-    nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
     gamma = 0.99, // Discount factor (γ)
     rewardScale = 10,
   },
@@ -217,10 +217,7 @@ const createAgentSacInstanceProps = async <
       
   const maybeSavedActor = await loadModelByName(actorName);
 
-  const tensorsIn = getActorCreateTensorsIn({
-    // TODO: remove these props
-    nTelemetry,
-  });
+  const tensorsIn = getActorCreateTensorsIn(Object.create(null));
 
   const actor: tf.LayersModel = maybeSavedActor ?? (
     await createActor<TensorsIn>({
@@ -235,7 +232,6 @@ const createAgentSacInstanceProps = async <
   return {
     batchSize,
     nActions,
-    nTelemetry,
     gamma,
     rewardScale,
     // https://github.com/rail-berkeley/softlearning/blob/13cf187cc93d90f7c217ea2845067491c3c65464/softlearning/algorithms/sac.py#L37
@@ -539,7 +535,7 @@ const trainCritics = ({
   q2Optimizer,
   q2Targ,
   rewardScale,
-  transition: {state, action, reward, nextState},
+  vectorizedTransitions: {state, action, reward, nextState},
 }: {
   readonly actor: tf.LayersModel;
   readonly batchSize: number;
@@ -554,7 +550,7 @@ const trainCritics = ({
   readonly q2Optimizer: tf.Optimizer;
   readonly q2Targ: tf.LayersModel;
   readonly rewardScale: number;
-  readonly transition: Omit<Transition, 'id' | 'priority'>;
+  readonly vectorizedTransitions: VectorizedTransitions;
 }) => {
   const getQLossFunction = (() => {
 
@@ -628,7 +624,7 @@ const trainAgentSac = ({
   rewardScale,
   targetEntropy,
   tau,
-  transition,
+  transitions,
 }: {
   readonly actor: tf.LayersModel;
   readonly actorOptimizer: tf.Optimizer;
@@ -647,8 +643,49 @@ const trainAgentSac = ({
   readonly rewardScale: number;
   readonly targetEntropy: number;
   readonly tau: number;
-  readonly transition: Omit<Transition, 'id' | 'priority'>;
+  readonly transitions: readonly Omit<Transition, 'id' | 'priority'>[];
 }) => tf.tidy(() => {
+
+  const framesL: tf.Tensor[] = [];
+  const framesR: tf.Tensor[] = [];
+  const telemetries: tf.Tensor[] = [];
+  const actions: tf.Tensor[] = [];
+  const rewards: tf.Tensor[] = [];
+  const nextFramesL: tf.Tensor[] = [];
+  const nextFramesR: tf.Tensor[] = [];
+  const nextTelemetries: tf.Tensor[] = [];
+    
+  for (const {
+    state: [telemetry, frameL, frameR], 
+    action, 
+    reward, 
+    nextState: [nextTelemetry, nextFrameL, nextFrameR] 
+  } of transitions) {
+    framesL.push(frameL);
+    framesR.push(frameR);
+    telemetries.push(telemetry);
+    actions.push(action);
+    rewards.push(reward);
+    nextFramesL.push(nextFrameL);
+    nextFramesR.push(nextFrameR);
+    nextTelemetries.push(nextTelemetry);
+  }
+
+  // TODO: refactor to represent vectorized transitions
+  const vectorizedTransitions: VectorizedTransitions = {
+    state: [
+      tf.stack(telemetries),
+      tf.stack(framesL),
+      tf.stack(framesR),
+    ],
+    action: tf.stack(actions), 
+    reward: tf.stack(rewards), 
+    nextState: [
+      tf.stack(nextTelemetries),
+      tf.stack(nextFramesL),
+      tf.stack(nextFramesR),
+    ],
+  };
  
   void trainCritics({
     actor,
@@ -664,10 +701,10 @@ const trainAgentSac = ({
     q2Optimizer,
     q2Targ,
     rewardScale,
-    transition,
+    vectorizedTransitions,
   });
 
-  const {state} = transition; 
+  const {state} = vectorizedTransitions; 
 
   void trainActor({actor, actorOptimizer, batchSize, getPredictionArgs, logAlpha, nActions, q1, q2, state});
   void trainAlpha({actor, alphaOptimizer, batchSize, getPredictionArgs, logAlpha, state, targetEntropy});
@@ -684,12 +721,7 @@ const createAgentSacInstanceResult = <
   readonly agentSacInstanceProps: AgentSacInstanceProps<TensorsIn>;
   readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
 }): AgentSacInstance => {
-  const {
-    actor,
-    batchSize,
-    nActions,
-    nTelemetry,
-  } = agentSacInstanceProps;
+  const {actor, batchSize, nActions} = agentSacInstanceProps;
 
   const sampleAction: AgentSacSampleActionCallback =
     ({state}: AgentSacSampleActionCallbackProps) => sampleActionFrom({
@@ -699,13 +731,7 @@ const createAgentSacInstanceResult = <
       state,
     }); 
 
-  return {
-    actor,
-    batchSize,
-    nActions,
-    nTelemetry,
-    sampleAction,
-  };
+  return {actor, batchSize, nActions, sampleAction};
 };
 
 export const createAgentSacInstance = async<
@@ -792,11 +818,11 @@ export const createAgentSacTrainableInstance = async <
     });
 
   const train: AgentSacTrainableTrainCallback = ({
-    transition,
+    transitions,
   }: AgentSacTrainableTrainCallbackProps) => trainAgentSac({
     ...agentSacTrainableInstanceProps,
     getPredictionArgs,
-    transition,
+    transitions,
   });
 
   return {...agentSacInstanceResult, checkpoint, train};

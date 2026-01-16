@@ -246,14 +246,14 @@ export const createCreatureEngine = async ({
   let timer = Date.now();
   let prevLinearVelocity = BABYLON.Vector3.Zero();
   const transitions = [];
-  const frameStack = [];
 
   const registerAfterRender = async ({
     creature,
     crCameraLeft,
     crCameraRight,
   }) => {
-    void frameStack.push(await Promise.all([
+
+    const base64s = await Promise.all([
       BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraLeft, {
         height: agentSacInstance.frameStackShape[0],
         width: agentSacInstance.frameStackShape[1],
@@ -262,15 +262,12 @@ export const createCreatureEngine = async ({
         height: agentSacInstance.frameStackShape[0],
         width: agentSacInstance.frameStackShape[1],
       }),
-    ]));
+    ]);
 
-    if (!frameStack.length) return;
-    assert(frameStack.length === 1);
-
-    const imgs = await Promise.all(frameStack.flat().map(base64ToImg))
+    const imgs =
+      await Promise.all(base64s.map(base64ToImg));
 
     const framesNorm = tf.tidy(() => {
-      const greyScaler = tf.tensor([0.299, 0.587, 0.114], [1, 1, 3]);
       const imgTensors = imgs
         .map(img => tf.browser.fromPixels(img))
         .map((t, i) => {
@@ -373,7 +370,6 @@ export const createCreatureEngine = async ({
     framesBatch.map(fr => fr.dispose());
     telemetryBatch.dispose();
     action.dispose();
-    frameStack.length = 0;
   };
 
   const {scene, ...extras} = await createScene({

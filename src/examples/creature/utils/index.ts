@@ -20,6 +20,8 @@ const frameStackShape: [number, number, number] = [25, 25, 3];
 const padding = 'valid';
 const kernelInitializer = 'glorotNormal';
 const biasInitializer = 'glorotNormal';
+// 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
+const nTelemetry = 10;
 
 const getPredictionArgs: AgentSacGetPredictionArgsCallback = ({state}) => state;
 
@@ -76,9 +78,7 @@ const getActorInputTensors: AgentSacGetActorInputTensorsCallback<CreatureTensors
   createConvEncoder(frameInputR),
 ];
 
-const getActorCreateTensorsIn: AgentSacGetActorCreateTensorsInCallback<CreatureTensorsIn> = ({
-  nTelemetry,
-}) => ({
+const getActorCreateTensorsIn: AgentSacGetActorCreateTensorsInCallback<CreatureTensorsIn> = () => ({
   frameInputL: tf.input({batchShape : [null, ...frameStackShape]}),
   frameInputR: tf.input({batchShape : [null, ...frameStackShape]}),
   telemetryInput: tf.input({batchShape : [null, nTelemetry]}),
@@ -110,7 +110,7 @@ export const createCreatureAgentSacInstance = async ({
       getActorInputTensors,
     });
 
-  return {...agentSacInstance, frameStackShape};
+  return {...agentSacInstance, frameStackShape, nTelemetry};
 };
 
 export const createCreatureAgentSacTrainableInstance = async ({
@@ -149,5 +149,5 @@ export const createCreatureAgentSacTrainableInstance = async ({
       tau,
     });
 
-  return {...agentSacTrainableInstance, frameStackShape};
+  return {...agentSacTrainableInstance, frameStackShape, nTelemetry};
 };
