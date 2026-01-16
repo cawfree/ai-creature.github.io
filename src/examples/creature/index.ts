@@ -186,7 +186,7 @@ const createScene = async ({
     [-15, -15, -15],
     [15, -15, 15],
   ];
-  void ['green', 'green', 'red', 'red', 'red', 'red', 'red', 'red'].forEach((color, i) => {
+  void ['green', 'red', 'red', 'red', 'red', 'red', 'red', 'red'].forEach((color, i) => {
       const ball = BABYLON.MeshBuilder.CreateSphere("ball_"+ color + i, {diameter: 7, segments: 64}, scene)
       ball.position = new BABYLON.Vector3(...ballPos[i])
       ball.parent = null
@@ -302,7 +302,7 @@ export const createCreatureEngine = async ({
     window.onCollide = undefined;
 
     const {
-      action: actionArr,
+      action,
       imageLeftPixelsNorm,
       imageRightPixelsNorm,
       telemetry,
@@ -323,13 +323,9 @@ export const createCreatureEngine = async ({
       },
     });
 
-    const impulse = actionArr.slice(0, 3);
-    assert(actionArr.length === 3)
-    assert(impulse.length === 3)
-
     // [0,-1,0]
     creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero()) // just in case, probably redundant
-    creature.impostor.applyImpulse(new BABYLON.Vector3(...impulse), creature.getAbsolutePosition()) // contact point zero
+    creature.impostor.applyImpulse(new BABYLON.Vector3(...action), creature.getAbsolutePosition()) // contact point zero
     creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero())
     
     // after applyImpulse the linear velocity is recalculated right away
@@ -341,7 +337,7 @@ export const createCreatureEngine = async ({
 
     const {nextTransition} =
       await agentSacInstance.createTransition({
-        action: actionArr,
+        action,
         imageLeftPixelsNorm,
         imageRightPixelsNorm,
         reward,
