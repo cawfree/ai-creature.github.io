@@ -4,14 +4,17 @@ import * as tf from '@tensorflow/tfjs';
 
 import {AgentSacInstance} from '../../@types';
 
+import {CreatureAgentSacInstance} from './@types';
+
 const canvas = document.getElementById('renderCanvas');
+
 const createDefaultEngine = () => new BABYLON.Engine(canvas, true, {
   preserveDrawingBuffer: true, 
   stencil: true,
   disableWebGL2Support: false
 })
 
-const base64ToImg = (base64: string) => new Promise((resolve) => {
+const base64ToImg = (base64: string) => new Promise<HTMLImageElement>((resolve) => {
   const img = new Image()
   img.src = base64
   return void (img.onload = () => resolve(img));
@@ -173,23 +176,32 @@ const createScene = async ({
         friction: 1
     }, scene);
 
-    const ballPos = [[-10,-10,10], [10,-10,-10], [-10,-10,-10], [10,-10,10]]
-    void ['green', 'green', 'red', 'red'].forEach((color, i) => {
-        const ball = BABYLON.MeshBuilder.CreateSphere("ball_"+ color + i, {diameter: 7, segments: 64}, scene)
-        ball.position = new BABYLON.Vector3(...ballPos[i])
-        ball.parent = null
-        ball.setParent(null)
-        ball.isPickable = true
-        ball.impostor = new BABYLON.PhysicsImpostor(ball, BABYLON.PhysicsImpostor.SphereImpostor, {
-            mass: 7,
-            friction: 1,
-            stiffness: 1,
-            restitution: 1
-        }, scene);
-        ball.material = scene.getMaterialByName(color + "Mat")
-        ball.checkCollisions = true
-        ball.material.backFaceCulling = false
-    });
+  const ballPos = [
+    [-10, -10, 10],
+    [10, -10, -10],
+    [-10, -10, -10],
+    [10, -10, 10],
+    [-15, -15, 15],
+    [15, -15, -15],
+    [-15, -15, -15],
+    [15, -15, 15],
+  ];
+  void ['green', 'green', 'red', 'red', 'red', 'red', 'red', 'red'].forEach((color, i) => {
+      const ball = BABYLON.MeshBuilder.CreateSphere("ball_"+ color + i, {diameter: 7, segments: 64}, scene)
+      ball.position = new BABYLON.Vector3(...ballPos[i])
+      ball.parent = null
+      ball.setParent(null)
+      ball.isPickable = true
+      ball.impostor = new BABYLON.PhysicsImpostor(ball, BABYLON.PhysicsImpostor.SphereImpostor, {
+          mass: 7,
+          friction: 1,
+          stiffness: 1,
+          restitution: 1
+      }, scene);
+      ball.material = scene.getMaterialByName(color + "Mat")
+      ball.checkCollisions = true
+      ball.material.backFaceCulling = false
+  });
 
     /* COLLISIONS DETECTION */
     const impostors = scene.getPhysicsEngine()._impostors.filter(im => im.object.id !== creature.id)
@@ -220,7 +232,7 @@ export const createCreatureEngine = async ({
   onTransitionPublished,
   whileNotBusyWhenReady,
 }: {
-  readonly agentSacInstance: AgentSacInstance;
+  readonly agentSacInstance: CreatureAgentSacInstance;
   readonly onTransitionPublished: (transition: Omit<Transition, 'nextState'>) => void;
   readonly whileNotBusyWhenReady: (fn: Function) => void;
 }) => {
@@ -234,7 +246,6 @@ export const createCreatureEngine = async ({
 
   const TRANSITIONS_BUFFER_SIZE = 2;
 
-  let stateId = 0;
   let timer = Date.now();
   let prevLinearVelocity = BABYLON.Vector3.Zero();
   const transitions = [];
@@ -264,70 +275,56 @@ export const createCreatureEngine = async ({
       base64ToImg(base64Right),
     ]);
 
-    const [
-      imageLeftPixelsNorm,
-      imageRightPixelsNorm,
-    ] = tf.tidy(() => {
-      const imageLeftPixels = tf.browser.fromPixels(imageLeft);
-      const imageRightPixels = tf.browser.fromPixels(imageRight);
-
-      tf.browser.toPixels(imageLeftPixels, document.getElementById('frameLeft'));
-      tf.browser.toPixels(imageRightPixels, document.getElementById('frameRight'));
-
-      return [
-        tf.concat([imageLeftPixels.sub(255/2).div(255/2)], -1) /* resL */,
-        tf.concat([imageRightPixels.sub(255/2).div(255/2)], -1) /* resR */,
-      ];
+    void tf.tidy(() => {
+      tf.browser.toPixels(tf.browser.fromPixels(imageLeft), document.getElementById('frameLeft'));
+      tf.browser.toPixels(tf.browser.fromPixels(imageRight), document.getElementById('frameRight'));
     });
-
-    const imageLeftFrame = tf.stack([imageLeftPixelsNorm]);
-    const imageRightFrame = tf.stack([imageRightPixelsNorm]);
 
     const delta = (Date.now() - timer) / 1000 // sec
     const linearVelocity = creature.impostor.getLinearVelocity()
     const linearVelocityNorm = linearVelocity.normalize()
     const acceleration = linearVelocity.subtract(prevLinearVelocity).scale(1/delta).normalize()
 
-    timer = Date.now()
-    prevLinearVelocity = linearVelocity
+    timer = Date.now();
+    prevLinearVelocity = linearVelocity;
 
-    const ray = new BABYLON.Ray(creature.position, linearVelocityNorm)
-    const hit = scene.pickWithRay(ray)
+    const ray = new BABYLON.Ray(creature.position, linearVelocityNorm);
+    const hit = scene.pickWithRay(ray);
 
     const lidar = hit.pickedMesh
       ? Math.tanh((hit.distance - creature.impostor.getRadius()) / 10)
       : 0;
 
-    const telemetry = [
-      linearVelocityNorm.x,
-      linearVelocityNorm.y,
-      linearVelocityNorm.z,
-      acceleration.x,
-      acceleration.y,
-      acceleration.z,
-      window.collision.x, 
-      window.collision.y, 
-      window.collision.z,
-      lidar,
-    ];
-
     const reward = window.reward;
 
-    window.collision = BABYLON.Vector3.Zero() // reset collision point
-    window.reward = -0.01
-    window.onCollide = undefined
-    const telemetryBatch = tf.tensor(telemetry, [1, agentSacInstance.nTelemetry])
-    const [action] = agentSacInstance.sampleAction({
-      state: [telemetryBatch, imageLeftFrame, imageRightFrame],
-    }); // timer ~5ms
+    window.collision = BABYLON.Vector3.Zero(); // reset collision point
+    window.reward = -0.01;
+    window.onCollide = undefined;
 
-    // TODO: !!!!!await find the way to avoid framesNorm.array()
-    // action come as a batch of size 1
-    const [framesArrL, framesArrR, [actionArr]] =
-      await Promise.all([imageLeftPixelsNorm.array(), imageRightPixelsNorm.array(), action.array()]);
+    const {
+      action: actionArr,
+      imageLeftPixelsNorm,
+      imageRightPixelsNorm,
+      telemetry,
+    } = await agentSacInstance.getAction({
+      imageLeft,
+      imageRight,
+      telemetry: {
+        lidar,
+        linearVelocityNormX: linearVelocityNorm.x,
+        linearVelocityNormY: linearVelocityNorm.y,
+        linearVelocityNormZ: linearVelocityNorm.z,
+        accelerationX: acceleration.x,
+        accelerationY: acceleration.y,
+        accelerationZ: acceleration.z,
+        windowCollisionX: window.collision.x,
+        windowCollisionY: window.collision.y,
+        windowCollisionZ: window.collision.z,
+      },
+    });
 
     const impulse = actionArr.slice(0, 3);
-    assert(actionArr.length === 3, actionArr.length)
+    assert(actionArr.length === 3)
     assert(impulse.length === 3)
 
     // [0,-1,0]
@@ -342,13 +339,16 @@ export const createCreatureEngine = async ({
     //if (!window.rr) window.rr = 
     // creature.lookAt(creature.position.add(new BABYLON.Vector3(0,1,0)))
 
-    const transition: Omit<Transition, 'nextState'> = {
-      id: stateId++, 
-      state: [telemetry, framesArrL, framesArrR],
-      action: actionArr,
-      reward,
-    };
-    transitions.push(transition);
+    const {nextTransition} =
+      await agentSacInstance.createTransition({
+        action: actionArr,
+        imageLeftPixelsNorm,
+        imageRightPixelsNorm,
+        reward,
+        telemetry,
+      });
+
+    void transitions.push(nextTransition);
 
     window.onCollide = (collision, mesh) => {
       window.collision = collision
@@ -367,12 +367,8 @@ export const createCreatureEngine = async ({
     if (transitions.length === TRANSITIONS_BUFFER_SIZE)
       void onTransitionPublished(transitions.shift());
 
-    imageLeftPixelsNorm.dispose();
-    imageRightPixelsNorm.dispose();
-    imageLeftFrame.dispose();
-    imageRightFrame.dispose();
-    telemetryBatch.dispose();
-    action.dispose();
+    void imageLeftPixelsNorm.dispose();
+    void imageRightPixelsNorm.dispose();
   };
 
   const {scene, ...extras} = await createScene({

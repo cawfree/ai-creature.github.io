@@ -14,7 +14,18 @@ import {
   createAgentSacTrainableInstance,
 } from '../../../utils';
 
-import {CreatureTensorsIn} from '../@types';
+import {
+  CreatureAgentSacInstance,
+  CreatureCreateTransitionCallback,
+  CreatureCreateTransitionProps,
+  CreatureGetActionCallback,
+  CreatureGetActionProps,
+  CreatureGetActionResult,
+  CreatureTensorsIn,
+  NormalizedCreatureState,
+  SerializedTransition,
+  Telemetry,
+} from '../@types';
 
 const frameStackShape: [number, number, number] = [25, 25, 3];
 const padding = 'valid';
@@ -84,13 +95,29 @@ const getActorCreateTensorsIn: AgentSacGetActorCreateTensorsInCallback<CreatureT
   frameInputR: tf.input({batchShape : [null, ...frameStackShape]}),
 });
 
-// trainAgent
-// assertShape(state[0], [batchSize, nTelemetry]);
-// assertShape(state[1], [batchSize, ...frameStackShape]);
-// assertShape(action, [batchSize, nActions]);
-// assertShape(reward, [batchSize, 1]);
-// assertShape(nextState[0], [batchSize, nTelemetry]);
-// assertShape(nextState[1], [batchSize, ...frameStackShape]);
+const vectorizeTelemetry = ({
+  linearVelocityNormX,
+  linearVelocityNormY,
+  linearVelocityNormZ,
+  accelerationX,
+  accelerationY,
+  accelerationZ,
+  windowCollisionX,
+  windowCollisionY,
+  windowCollisionZ,
+  lidar,
+}: Telemetry) => [
+  linearVelocityNormX,
+  linearVelocityNormY,
+  linearVelocityNormZ,
+  accelerationX,
+  accelerationY,
+  accelerationZ,
+  windowCollisionX,
+  windowCollisionY,
+  windowCollisionZ,
+  lidar,
+];
 
 export const createCreatureAgentSacInstance = async ({
   // TODO: force specify name
@@ -99,8 +126,8 @@ export const createCreatureAgentSacInstance = async ({
 }: {
   readonly actorName?: string;
   readonly agentSacProps?: Partial<AgentSacConstructorProps>;
-} = Object.create(null)) => {
-  const agentSacInstance =
+} = Object.create(null)): Promise<CreatureAgentSacInstance> => {
+  const {sampleAction, nActions, ...extras} =
     await createAgentSacInstance({
       actorName,
       agentSacProps,
@@ -109,8 +136,97 @@ export const createCreatureAgentSacInstance = async ({
       getActorExtractModelInputs,
       getActorInputTensors,
     });
+  
+  const getAction: CreatureGetActionCallback = async ({
+    imageLeft,
+    imageRight,
+    telemetry,
+  }: CreatureGetActionProps): Promise<CreatureGetActionResult> => {
+    const [
+      imageLeftPixelsNorm,
+      imageRightPixelsNorm,
+    ] = tf.tidy(() => {
+      const imageLeftPixels = tf.browser.fromPixels(imageLeft);
+      const imageRightPixels = tf.browser.fromPixels(imageRight);
+      return [
+        tf.concat([imageLeftPixels.sub(255/2).div(255/2)], -1) /* resL */,
+        tf.concat([imageRightPixels.sub(255/2).div(255/2)], -1) /* resR */,
+      ];
+    });
 
-  return {...agentSacInstance, frameStackShape, nTelemetry};
+    const imageLeftFrame = tf.stack([imageLeftPixelsNorm]);
+    const imageRightFrame = tf.stack([imageRightPixelsNorm]);
+    const telemetryBatch = tf.tensor(vectorizeTelemetry(telemetry), [1, nTelemetry])
+
+    const [pi, logPi] = sampleAction({
+      state: [telemetryBatch, imageLeftFrame, imageRightFrame],
+    });
+
+    // TODO: Fix this.
+    // @ts-ignore
+    const [[action]] = await Promise.all([pi.array()]);
+    assert(Array.isArray(action) && action.length === nActions);
+
+    void imageLeftFrame.dispose();
+    void imageRightFrame.dispose();
+    void telemetryBatch.dispose();
+
+    void pi.dispose();
+    void logPi.dispose();
+
+    return {
+      // NOTE: The caller is expected to take ownership
+      //       of disposing these tensors.
+      imageLeftPixelsNorm,
+      imageRightPixelsNorm,
+      action,
+      telemetry,
+    };
+  };
+
+  let stateId = 0;
+
+  const createTransition: CreatureCreateTransitionCallback = async({
+    imageLeftPixelsNorm,
+    imageRightPixelsNorm,
+    reward,
+    action: actionArr,
+    telemetry,
+  }: CreatureCreateTransitionProps)  => {
+
+    // TODO: fix this
+    // @ts-ignore
+    const [framesArrL, framesArrR] =
+      await Promise.all([imageLeftPixelsNorm.array(), imageRightPixelsNorm.array()]);
+
+    const normalizedState: NormalizedCreatureState = [
+      vectorizeTelemetry(telemetry),
+      framesArrL,
+      framesArrR,
+    ];
+    
+    // TODO: strong typing for serialized transitions
+    const nextTransition: SerializedTransition = {
+      id: stateId++, 
+      state: normalizedState,
+      action: actionArr,
+      reward,
+    };
+
+    return {
+      nextTransition,
+      imageLeftPixelsNorm,
+      imageRightPixelsNorm,
+    };
+  };
+
+  return {
+    ...extras,
+    nActions,
+    createTransition,
+    frameStackShape,
+    getAction,
+  };
 };
 
 export const createCreatureAgentSacTrainableInstance = async ({

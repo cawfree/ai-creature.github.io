@@ -66,9 +66,9 @@ export type AgentSacSampleActionCallbackProps = {
   readonly state: tf.Tensor[];
 };
 
-export type AgentSacSampleActionCallback = (
-  props: AgentSacSampleActionCallbackProps
-) => [pi: tf.Tensor, logPi: tf.Tensor];
+export type SampledAction = [pi: tf.Tensor, logPi: tf.Tensor];
+
+export type AgentSacSampleActionCallback = (props: AgentSacSampleActionCallbackProps) => SampledAction;
 
 export type AgentSacTrainableCheckpointCallback = () => Promise<void>;
 
