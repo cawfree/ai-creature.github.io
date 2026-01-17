@@ -236,6 +236,50 @@ export const createCreatureAgentSacInstance = async ({
   };
 };
 
+const vectorizeTransitions: VectorizeTransitionsCallback<CreatureState> = ({
+  transitions,
+}): VectorizedTransitions => {
+  const framesL: tf.Tensor[] = [];
+  const framesR: tf.Tensor[] = [];
+  const telemetries: tf.Tensor[] = [];
+  const actions: tf.Tensor[] = [];
+  const rewards: tf.Tensor[] = [];
+  const nextFramesL: tf.Tensor[] = [];
+  const nextFramesR: tf.Tensor[] = [];
+  const nextTelemetries: tf.Tensor[] = [];
+
+  for (const {
+    state: [telemetry, frameL, frameR], 
+    action, 
+    reward, 
+    nextState: [nextTelemetry, nextFrameL, nextFrameR] 
+  } of transitions) {
+    void framesL.push(frameL);
+    void framesR.push(frameR);
+    void telemetries.push(telemetry);
+    void actions.push(action);
+    void rewards.push(reward);
+    void nextFramesL.push(nextFrameL);
+    void nextFramesR.push(nextFrameR);
+    void nextTelemetries.push(nextTelemetry);
+  }
+
+  return {
+    state: [
+      tf.stack(telemetries),
+      tf.stack(framesL),
+      tf.stack(framesR),
+    ],
+    action: tf.stack(actions), 
+    reward: tf.stack(rewards), 
+    nextState: [
+      tf.stack(nextTelemetries),
+      tf.stack(nextFramesL),
+      tf.stack(nextFramesR),
+    ],
+  };
+};
+
 export const createCreatureAgentSacTrainableInstance = async ({
   // TODO: force specify names
   actorName = NAME.ACTOR,
@@ -256,50 +300,6 @@ export const createCreatureAgentSacTrainableInstance = async ({
   readonly q2TargetName?: string;
   readonly tau?: number;
 } = Object.create(null)) => {
-
-  const vectorizeTransitions: VectorizeTransitionsCallback<CreatureState> = ({
-    transitions,
-  }): VectorizedTransitions => {
-    const framesL: tf.Tensor[] = [];
-    const framesR: tf.Tensor[] = [];
-    const telemetries: tf.Tensor[] = [];
-    const actions: tf.Tensor[] = [];
-    const rewards: tf.Tensor[] = [];
-    const nextFramesL: tf.Tensor[] = [];
-    const nextFramesR: tf.Tensor[] = [];
-    const nextTelemetries: tf.Tensor[] = [];
-
-    for (const {
-      state: [telemetry, frameL, frameR], 
-      action, 
-      reward, 
-      nextState: [nextTelemetry, nextFrameL, nextFrameR] 
-    } of transitions) {
-      void framesL.push(frameL);
-      void framesR.push(frameR);
-      void telemetries.push(telemetry);
-      void actions.push(action);
-      void rewards.push(reward);
-      void nextFramesL.push(nextFrameL);
-      void nextFramesR.push(nextFrameR);
-      void nextTelemetries.push(nextTelemetry);
-    }
-
-    return {
-      state: [
-        tf.stack(telemetries),
-        tf.stack(framesL),
-        tf.stack(framesR),
-      ],
-      action: tf.stack(actions), 
-      reward: tf.stack(rewards), 
-      nextState: [
-        tf.stack(nextTelemetries),
-        tf.stack(nextFramesL),
-        tf.stack(nextFramesR),
-      ],
-    };
-  };
 
   const agentSacTrainableInstance =
     await createAgentSacTrainableInstance({
