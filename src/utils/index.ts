@@ -17,6 +17,7 @@ import {
   AgentSacTrainableInstanceProps,
   AgentSacTrainableTrainCallback,
   AgentSacTrainableTrainCallbackProps,
+  SampledAction,
   SymbolicTensors,
   Transition,
   VectorizedTransitions,
@@ -91,7 +92,7 @@ export const applySquashing = (pi: tf.Tensor, mu: tf.Tensor, logPi: tf.Tensor) =
   return {pi, mu, logPi};
 };
 
-export const sampleActionFrom = ({
+const sampleActionFrom = ({
   actor,
   batchSize,
   getPredictionArgs,
@@ -101,7 +102,7 @@ export const sampleActionFrom = ({
   readonly batchSize: number;
   readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
   readonly state: tf.Tensor[];
-}): [pi: tf.Tensor, logPi: tf.Tensor] => tf.tidy(() => {
+}): SampledAction => tf.tidy(() => {
   const prediction = actor.predict(getPredictionArgs({state}), {batchSize});
   assert(Array.isArray(prediction));
 
