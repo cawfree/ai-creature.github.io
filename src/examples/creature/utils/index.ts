@@ -194,10 +194,10 @@ export const createCreatureAgentSacInstance = async ({
     telemetry,
   }: CreatureCreateTransitionProps)  => {
 
-    // TODO: fix this
-    // @ts-ignore
-    const [framesArrL, framesArrR] =
-      await Promise.all([imageLeftPixelsNorm.array(), imageRightPixelsNorm.array()]);
+    const [framesArrL, framesArrR] = await Promise.all([
+      imageLeftPixelsNorm.array(),
+      imageRightPixelsNorm.array(),
+    ]);
 
     const normalizedState: NormalizedCreatureState = [
       vectorizeTelemetry(telemetry),
