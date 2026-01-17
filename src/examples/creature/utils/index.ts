@@ -162,10 +162,14 @@ export const createCreatureAgentSacInstance = async ({
       state: [telemetryBatch, imageLeftFrame, imageRightFrame],
     });
 
-    // TODO: Fix this.
-    // @ts-ignore
-    const [[action]] = await Promise.all([pi.array()]);
-    assert(Array.isArray(action) && action.length === nActions);
+    const piArray = await pi.array();
+    assert(Array.isArray(piArray));
+
+    const maybeAction = piArray[0];
+    assert(Array.isArray(maybeAction));
+
+    const action = maybeAction.flatMap((e: unknown) => typeof e === 'number' ? [e] : []);
+    assert(action.length === nActions);
 
     void imageLeftFrame.dispose();
     void imageRightFrame.dispose();
