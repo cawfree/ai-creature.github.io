@@ -6,7 +6,6 @@ import {
   AgentSacGetActorCreateTensorsInCallback,
   AgentSacGetActorExtractModelInputsCallback,
   AgentSacGetActorInputTensorsCallback,
-  AgentSacGetPredictionArgsCallback,
   VectorizedTransitions,
   VectorizeTransitionsCallback,
 } from '../../../@types';
@@ -36,8 +35,6 @@ const kernelInitializer = 'glorotNormal';
 const biasInitializer = 'glorotNormal';
 // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
 const nTelemetry = 10;
-
-const getPredictionArgs: AgentSacGetPredictionArgsCallback = ({state}) => state;
 
 const createConvEncoder = (inputs: tf.SymbolicTensor): tf.SymbolicTensor => { 
 
@@ -135,7 +132,6 @@ export const createCreatureAgentSacInstance = async ({
       actorName,
       agentSacProps,
       getActorCreateTensorsIn,
-      getPredictionArgs,
       getActorExtractModelInputs,
       getActorInputTensors,
     });
@@ -308,7 +304,6 @@ export const createCreatureAgentSacTrainableInstance = async ({
       getActorCreateTensorsIn,
       getActorExtractModelInputs,
       getActorInputTensors,
-      getPredictionArgs,
       logAlphaName,
       q1Name,
       q1TargetName,

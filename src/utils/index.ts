@@ -7,7 +7,6 @@ import {
   AgentSacGetActorCreateTensorsInCallback,
   AgentSacGetActorExtractModelInputsCallback,
   AgentSacGetActorInputTensorsCallback,
-  AgentSacGetPredictionArgsCallback,
   AgentSacInstance,
   AgentSacInstanceProps,
   AgentSacSampleActionCallback,
@@ -96,15 +95,13 @@ export const applySquashing = (pi: tf.Tensor, mu: tf.Tensor, logPi: tf.Tensor) =
 const sampleActionFrom = ({
   actor,
   batchSize,
-  getPredictionArgs,
   state,
 }: {
   readonly actor: tf.LayersModel;
   readonly batchSize: number;
-  readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
   readonly state: tf.Tensor[];
 }): SampledAction => tf.tidy(() => {
-  const prediction = actor.predict(getPredictionArgs({state}), {batchSize});
+  const prediction = actor.predict(state, {batchSize});
   assert(Array.isArray(prediction));
 
   let [mu, logStd] = prediction;
@@ -434,7 +431,6 @@ const trainAlpha = async ({
   actor,
   alphaOptimizer,
   batchSize,
-  getPredictionArgs,
   logAlpha,
   state,
   targetEntropy,
@@ -442,14 +438,12 @@ const trainAlpha = async ({
   readonly actor: tf.LayersModel;
   readonly alphaOptimizer: tf.Optimizer;
   readonly batchSize: number;
-  readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
   readonly logAlpha: tf.Variable<tf.Rank.R0>;
   readonly state: tf.Tensor[];
   readonly targetEntropy: number;
 }) => {
   const alphaLossFunction = (): tf.Scalar => {
-    const sampledAction =
-      sampleActionFrom({actor, batchSize, getPredictionArgs, state});
+    const sampledAction = sampleActionFrom({actor, batchSize, state});
 
     assert(Array.isArray(sampledAction));
     const [, logPi] = sampledAction;
@@ -469,7 +463,6 @@ const trainActor = ({
   actor,
   actorOptimizer,
   batchSize,
-  getPredictionArgs,
   logAlpha,
   nActions,
   q1,
@@ -479,7 +472,6 @@ const trainActor = ({
   readonly actor: tf.LayersModel;
   readonly actorOptimizer: tf.Optimizer;
   readonly batchSize: number;
-  readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
   readonly logAlpha: tf.Variable<tf.Rank.R0>;
   readonly nActions: number;
   readonly q1: tf.LayersModel;
@@ -488,14 +480,13 @@ const trainActor = ({
 }) => {
   // TODO: consider delayed update of policy and targets (if possible)
   const actorLossFunction = (): tf.Scalar => {
-    const sampledAction =
-      sampleActionFrom({actor, batchSize, getPredictionArgs, state});
+    const sampledAction = sampleActionFrom({actor, batchSize, state});
   
       assert(Array.isArray(sampledAction));
   
       const [freshAction, logPi] = sampledAction;
 
-      const basePredictionArgs = getPredictionArgs({state});
+      const basePredictionArgs = state;
       const nextPredictionArgs: tf.Tensor[] =
         Array.isArray(basePredictionArgs)
           ? [...basePredictionArgs, freshAction]
@@ -527,7 +518,6 @@ const trainCritics = ({
   actor,
   batchSize,
   gamma,
-  getPredictionArgs,
   logAlpha,
   nActions,
   q1,
@@ -542,7 +532,6 @@ const trainCritics = ({
   readonly actor: tf.LayersModel;
   readonly batchSize: number;
   readonly gamma: number;
-  readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
   readonly logAlpha: tf.Variable<tf.Rank.R0>;
   readonly nActions: number;
   readonly q1: tf.LayersModel;
@@ -556,13 +545,12 @@ const trainCritics = ({
 }) => {
   const getQLossFunction = (() => {
 
-    const sampledAction =
-      sampleActionFrom({actor, batchSize, getPredictionArgs, state});
+    const sampledAction = sampleActionFrom({actor, batchSize, state});
 
     assert(Array.isArray(sampledAction));
     const [nextFreshAction, logPi] = sampledAction;
 
-    const basePredictionArgs = getPredictionArgs({state: nextState});
+    const basePredictionArgs = nextState;
     const nextPredictionArgs: tf.Tensor[] =
       Array.isArray(basePredictionArgs)
         ? [...basePredictionArgs, nextFreshAction]
@@ -584,9 +572,12 @@ const trainCritics = ({
     assertShape(target, [batchSize, 1]);
   
     return (q: tf.LayersModel) => (): tf.Scalar => {
-      const predictionArgs = getPredictionArgs({state});
+      const predictionArgs = state;
+
       const qValue = q.predict(
-        Array.isArray(predictionArgs) ? [...predictionArgs, action] : [predictionArgs, action],
+        Array.isArray(predictionArgs)
+          ? [...predictionArgs, action]
+          : [predictionArgs, action],
         {batchSize},
       );
 
@@ -614,7 +605,6 @@ const trainAgentSac = <State>({
   alphaOptimizer,
   batchSize,
   gamma,
-  getPredictionArgs,
   logAlpha,
   nActions,
   q1,
@@ -634,7 +624,6 @@ const trainAgentSac = <State>({
   readonly alphaOptimizer: tf.Optimizer;
   readonly batchSize: number;
   readonly gamma: number;
-  readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
   readonly logAlpha: tf.Variable<tf.Rank.R0>;
   readonly nActions: number;
   readonly q1: tf.LayersModel;
@@ -656,7 +645,6 @@ const trainAgentSac = <State>({
     actor,
     batchSize,
     gamma,
-    getPredictionArgs,
     logAlpha,
     nActions,
     q1,
@@ -671,8 +659,8 @@ const trainAgentSac = <State>({
 
   const {state} = vectorizedTransitions; 
 
-  void trainActor({actor, actorOptimizer, batchSize, getPredictionArgs, logAlpha, nActions, q1, q2, state});
-  void trainAlpha({actor, alphaOptimizer, batchSize, getPredictionArgs, logAlpha, state, targetEntropy});
+  void trainActor({actor, actorOptimizer, batchSize, logAlpha, nActions, q1, q2, state});
+  void trainAlpha({actor, alphaOptimizer, batchSize, logAlpha, state, targetEntropy});
 
   void updateTrainableTargets({q1, q1Targ, q2, q2Targ, tau});
 });
@@ -681,10 +669,8 @@ const createAgentSacInstanceResult = <
   TensorsIn extends SymbolicTensors
 >({
   agentSacInstanceProps,
-  getPredictionArgs,
 }: {
   readonly agentSacInstanceProps: AgentSacInstanceProps<TensorsIn>;
-  readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
 }): AgentSacInstance => {
   const {actor, batchSize, nActions} = agentSacInstanceProps;
 
@@ -692,7 +678,6 @@ const createAgentSacInstanceResult = <
     ({state}: AgentSacSampleActionCallbackProps) => sampleActionFrom({
       actor,
       batchSize,
-      getPredictionArgs,
       state,
     }); 
 
@@ -707,14 +692,12 @@ export const createAgentSacInstance = async<
   getActorCreateTensorsIn,
   getActorExtractModelInputs,
   getActorInputTensors,
-  getPredictionArgs,
 }: {
   readonly actorName: string;
   readonly agentSacProps: Partial<AgentSacConstructorProps>;
   readonly getActorCreateTensorsIn: AgentSacGetActorCreateTensorsInCallback<TensorsIn>;
   readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback<TensorsIn>;
   readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback<TensorsIn>;
-  readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
 }): Promise<AgentSacInstance> => createAgentSacInstanceResult({
   agentSacInstanceProps: 
     await createAgentSacInstanceProps({
@@ -724,7 +707,6 @@ export const createAgentSacInstance = async<
       getActorExtractModelInputs,
       getActorInputTensors,
     }),
-  getPredictionArgs,
 });
 
 export const createAgentSacTrainableInstance = async <
@@ -736,7 +718,6 @@ export const createAgentSacTrainableInstance = async <
   getActorCreateTensorsIn,
   getActorExtractModelInputs,
   getActorInputTensors,
-  getPredictionArgs,
   logAlphaName,
   q1Name,
   q1TargetName,
@@ -750,7 +731,6 @@ export const createAgentSacTrainableInstance = async <
   readonly getActorCreateTensorsIn: AgentSacGetActorCreateTensorsInCallback<TensorsIn>;
   readonly getActorExtractModelInputs: AgentSacGetActorExtractModelInputsCallback<TensorsIn>;
   readonly getActorInputTensors: AgentSacGetActorInputTensorsCallback<TensorsIn>;
-  readonly getPredictionArgs: AgentSacGetPredictionArgsCallback;
   readonly logAlphaName: string;
   readonly q1Name: string;
   readonly q1TargetName: string;
@@ -782,14 +762,12 @@ export const createAgentSacTrainableInstance = async <
   const agentSacInstanceResult =
     createAgentSacInstanceResult({
       agentSacInstanceProps: agentSacTrainableInstanceProps,
-      getPredictionArgs,
     });
 
   const train: AgentSacTrainableTrainCallback<State> = ({
     transitions,
   }: AgentSacTrainableTrainCallbackProps<State>) => trainAgentSac({
     ...agentSacTrainableInstanceProps,
-    getPredictionArgs,
     transitions,
     vectorizeTransitions,
   });

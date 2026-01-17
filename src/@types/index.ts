@@ -95,14 +95,6 @@ export type AgentSacTrainableInstance<State> =
     readonly train: AgentSacTrainableTrainCallback<State>;
   };
 
-export type AgentSacGetPredictionArgsCallbackProps = {
-  readonly state: tf.Tensor[];
-};
-
-export type AgentSacGetPredictionArgsCallback = (
-  props: AgentSacGetPredictionArgsCallbackProps
-) => tf.Tensor[] | tf.Tensor;
-
 export type AgentSacGetActorInputTensorsCallbackProps<
   TensorsIn extends SymbolicTensors
 > = {

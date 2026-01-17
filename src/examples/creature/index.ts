@@ -185,8 +185,12 @@ const createScene = async ({
     [15, -15, -15],
     [-15, -15, -15],
     [15, -15, 15],
+    [-5, -5, 5],
+    [5, -5, -5],
+    [-5, -5, -5],
+    [5, -5, 5],
   ];
-  void ['green', 'red', 'red', 'red', 'red', 'red', 'red', 'red'].forEach((color, i) => {
+  void ['green', 'red', 'red', 'red', 'red', 'red', 'red', 'red', 'red', 'red', 'red', 'red'].forEach((color, i) => {
       const ball = BABYLON.MeshBuilder.CreateSphere("ball_"+ color + i, {diameter: 7, segments: 64}, scene)
       ball.position = new BABYLON.Vector3(...ballPos[i])
       ball.parent = null
