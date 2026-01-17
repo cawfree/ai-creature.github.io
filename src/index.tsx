@@ -8,6 +8,7 @@ import './index.css';
 import {Transition} from './@types';
 import {creature} from './examples';
 import {createCreatureAgentSacInstance} from './examples/creature/utils';
+import { CreatureState } from './examples/creature/@types';
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
@@ -50,7 +51,7 @@ root.render(<React.StrictMode />);
   return creature.createCreatureEngine({
     agentSacInstance,
     onTransitionPublished: (
-      transition: Omit<Transition, 'nextState'>
+      transition: Omit<Transition<CreatureState>, 'nextState'>
     ) => worker.postMessage({action: 'newTransition', transition}),
     whileNotBusyWhenReady,
   }); 

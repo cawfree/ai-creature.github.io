@@ -1,5 +1,11 @@
 import * as tf from '@tensorflow/tfjs';
-import { AgentSacInstance, SampledAction } from '../../../@types';
+import {AgentSacInstance} from '../../../@types';
+
+export type CreatureState = [
+  telemetry: tf.Tensor1D,
+  frameL: tf.Tensor3D,
+  frameR: tf.Tensor3D,
+];
 
 export type CreatureTensorsIn = {
   readonly frameInputL: tf.SymbolicTensor;

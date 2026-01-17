@@ -1,13 +1,13 @@
 import {Transition} from '../@types';
 import {getRandomInt} from '../utils';
 
-export class ReplyBuffer {
+export class ReplyBuffer<State> {
 
   _limit: number;
-  _onDiscard: (transition: Omit<Transition, 'nextState'>) => void;
+  _onDiscard: (transition: Omit<Transition<State>, 'nextState'>) => void;
   size: number;
   _pool: number[];
-  _buffer: Omit<Transition, 'nextState'>[];
+  _buffer: Omit<Transition<State>, 'nextState'>[];
 
   /**
    * Constructor.
@@ -15,7 +15,7 @@ export class ReplyBuffer {
    * @param {*} limit maximum number of transitions
    * @param {*} onDiscard callback triggered on discard a transition
    */
-  constructor(limit = 500, onDiscard = (transition: Omit<Transition, 'nextState'>) => {}) {
+  constructor(limit = 500, onDiscard = (transition: Omit<Transition<State>, 'nextState'>) => {}) {
       this._limit = limit
       this._onDiscard = onDiscard
 
@@ -31,7 +31,7 @@ export class ReplyBuffer {
    * 
    * @param {{id: number, priority: number, state: array, action, reward: number}} transition transition
    */
-  add(transition: Omit<Transition, 'nextState'>) {
+  add(transition: Omit<Transition<State>, 'nextState'>) {
       let { id, priority = 1 } = transition
       if (id === undefined || id < 0 || priority < 1) 
           throw new Error('Invalid arguments')

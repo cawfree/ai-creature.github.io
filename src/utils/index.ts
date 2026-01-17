@@ -21,6 +21,7 @@ import {
   SymbolicTensors,
   Transition,
   VectorizedTransitions,
+  VectorizeTransitionsCallback,
 } from '../@types';
 import {EPSILON, LOG_STD_MAX, LOG_STD_MIN, VERSION} from '../constants';
 
@@ -607,7 +608,7 @@ const trainCritics = ({
 
 };
 
-const trainAgentSac = ({
+const trainAgentSac = <State>({
   actor,
   actorOptimizer,
   alphaOptimizer,
@@ -626,6 +627,7 @@ const trainAgentSac = ({
   targetEntropy,
   tau,
   transitions,
+  vectorizeTransitions,
 }: {
   readonly actor: tf.LayersModel;
   readonly actorOptimizer: tf.Optimizer;
@@ -644,50 +646,12 @@ const trainAgentSac = ({
   readonly rewardScale: number;
   readonly targetEntropy: number;
   readonly tau: number;
-  readonly transitions: readonly Omit<Transition, 'id' | 'priority'>[];
-}) => tf.tidy(() => {
+  readonly transitions: readonly Omit<Transition<State>, 'id' | 'priority'>[];
+  readonly vectorizeTransitions: VectorizeTransitionsCallback<State>;
+}) => tf.tidy(() => { 
+  const vectorizedTransitions =
+    vectorizeTransitions({transitions});
 
-  const framesL: tf.Tensor[] = [];
-  const framesR: tf.Tensor[] = [];
-  const telemetries: tf.Tensor[] = [];
-  const actions: tf.Tensor[] = [];
-  const rewards: tf.Tensor[] = [];
-  const nextFramesL: tf.Tensor[] = [];
-  const nextFramesR: tf.Tensor[] = [];
-  const nextTelemetries: tf.Tensor[] = [];
-    
-  for (const {
-    state: [telemetry, frameL, frameR], 
-    action, 
-    reward, 
-    nextState: [nextTelemetry, nextFrameL, nextFrameR] 
-  } of transitions) {
-    framesL.push(frameL);
-    framesR.push(frameR);
-    telemetries.push(telemetry);
-    actions.push(action);
-    rewards.push(reward);
-    nextFramesL.push(nextFrameL);
-    nextFramesR.push(nextFrameR);
-    nextTelemetries.push(nextTelemetry);
-  }
-
-  // TODO: refactor to represent vectorized transitions
-  const vectorizedTransitions: VectorizedTransitions = {
-    state: [
-      tf.stack(telemetries),
-      tf.stack(framesL),
-      tf.stack(framesR),
-    ],
-    action: tf.stack(actions), 
-    reward: tf.stack(rewards), 
-    nextState: [
-      tf.stack(nextTelemetries),
-      tf.stack(nextFramesL),
-      tf.stack(nextFramesR),
-    ],
-  };
- 
   void trainCritics({
     actor,
     batchSize,
@@ -764,7 +728,8 @@ export const createAgentSacInstance = async<
 });
 
 export const createAgentSacTrainableInstance = async <
-  TensorsIn extends SymbolicTensors
+  State,
+  TensorsIn extends SymbolicTensors,
 >({
   actorName,
   agentSacProps,
@@ -778,6 +743,7 @@ export const createAgentSacTrainableInstance = async <
   q2Name,
   q2TargetName,
   tau,
+  vectorizeTransitions,
 }: {
   readonly actorName: string;
   readonly agentSacProps: Partial<AgentSacConstructorProps>;
@@ -791,7 +757,8 @@ export const createAgentSacTrainableInstance = async <
   readonly q2Name: string;
   readonly q2TargetName: string;
   readonly tau: number;
-}): Promise<AgentSacTrainableInstance> => {
+  readonly vectorizeTransitions: VectorizeTransitionsCallback<State>;
+}): Promise<AgentSacTrainableInstance<State>> => {
   const agentSacTrainableInstanceProps =
     await createAgentSacTrainableInstanceProps({
       actorName,
@@ -818,12 +785,13 @@ export const createAgentSacTrainableInstance = async <
       getPredictionArgs,
     });
 
-  const train: AgentSacTrainableTrainCallback = ({
+  const train: AgentSacTrainableTrainCallback<State> = ({
     transitions,
-  }: AgentSacTrainableTrainCallbackProps) => trainAgentSac({
+  }: AgentSacTrainableTrainCallbackProps<State>) => trainAgentSac({
     ...agentSacTrainableInstanceProps,
     getPredictionArgs,
     transitions,
+    vectorizeTransitions,
   });
 
   return {...agentSacInstanceResult, checkpoint, train};

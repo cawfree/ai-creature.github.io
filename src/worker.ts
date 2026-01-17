@@ -6,6 +6,7 @@ import {ReplyBuffer} from './classes';
 import {assertNumericArray} from './utils';
 
 import {createCreatureAgentSacTrainableInstance} from './examples/creature/utils';
+import { CreatureState } from './examples/creature/@types';
 
 const DISABLED = false
 const BATCH_SIZE_AMPLIFIER = 10;
@@ -24,9 +25,9 @@ void (async () => {
     weights: await Promise.all(agentSacTrainableInstance.actor.getWeights().map(w => w.array())),
   });
 
-  const rb = new ReplyBuffer(
+  const rb = new ReplyBuffer<CreatureState>(
      5000 * agentSacTrainableInstance.batchSize,
-    ({state: [telemetry, frameL, frameR], action, reward}: Omit<Transition, 'nextState'>) => {
+    ({state: [telemetry, frameL, frameR], action, reward}: Omit<Transition<CreatureState>, 'nextState'>) => {
       frameL.dispose();
       frameR.dispose();
       telemetry.dispose();
@@ -66,7 +67,7 @@ void (async () => {
      * @param {{ id, state, action, reward }} transition 
      * @returns 
      */
-    const decodeTransition = (transition: Record<string, unknown>): Omit<Transition, 'nextState'> => {
+    const decodeTransition = (transition: Record<string, unknown>): Omit<Transition<CreatureState>, 'nextState'> => {
         const {id, state, action, reward, priority} = transition
 
         assert(typeof id === 'number');
@@ -79,7 +80,7 @@ void (async () => {
 
         const [telemetry, frameL, frameR] = state;
     
-        return tf.tidy((): Omit<Transition, 'nextState'> => ({
+        return tf.tidy((): Omit<Transition<CreatureState>, 'nextState'> => ({
           id,
           state: [
             tf.tensor1d(telemetry),

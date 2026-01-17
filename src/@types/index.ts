@@ -1,16 +1,12 @@
 import * as tf from '@tensorflow/tfjs';
 
-export type TensorLike = tf.Tensor<tf.Rank> | tf.Tensor<tf.Rank>[] | tf.SymbolicTensor | tf.SymbolicTensor[];
+export type TensorLike =
+  | tf.Tensor<tf.Rank>
+  | tf.Tensor<tf.Rank>[]
+  | tf.SymbolicTensor
+  | tf.SymbolicTensor[];
 
-// TODO: Add some extractor.
-// TODO: Refactor this.
-export type State = [
-  telemetry: tf.Tensor1D,
-  frameL: tf.Tensor3D,
-  frameR: tf.Tensor3D,
-];
-
-export type Transition = {
+export type Transition<State> = {
   readonly id: number;
   // TODO: maybe declare separately?
   readonly priority?: number;
@@ -84,19 +80,19 @@ export type AgentSacInstance = {
   readonly sampleAction: AgentSacSampleActionCallback;
 };
 
-export type AgentSacTrainableTrainCallbackProps = {
-  readonly transitions: readonly Omit<Transition, 'id' | 'priority'>[];
+export type AgentSacTrainableTrainCallbackProps<State> = {
+  readonly transitions: readonly Omit<Transition<State>, 'id' | 'priority'>[];
 };
 
-export type AgentSacTrainableTrainCallback = (
-  props: AgentSacTrainableTrainCallbackProps
+export type AgentSacTrainableTrainCallback<State> = (
+  props: AgentSacTrainableTrainCallbackProps<State>
 ) => void;
 
-export type AgentSacTrainableInstance =
+export type AgentSacTrainableInstance<State> =
   & AgentSacInstance
   & {
     readonly checkpoint: AgentSacTrainableCheckpointCallback;
-    readonly train: AgentSacTrainableTrainCallback;
+    readonly train: AgentSacTrainableTrainCallback<State>;
   };
 
 export type AgentSacGetPredictionArgsCallbackProps = {
@@ -137,3 +133,9 @@ export type AgentSacGetActorCreateTensorsInCallback<
   TensorsIn extends SymbolicTensors,
 > = (props: AgentSacGetActorCreateTensorsInCallbackProps) => TensorsIn;
 
+export type VectorizeTransitionsCallbackProps<State> = {
+  readonly transitions: readonly Omit<Transition<State>, 'id' | 'priority'>[];
+};
+
+export type VectorizeTransitionsCallback<State> =
+  (props: VectorizeTransitionsCallbackProps<State>) => VectorizedTransitions;
