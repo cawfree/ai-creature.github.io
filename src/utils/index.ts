@@ -22,7 +22,11 @@ import {
   VectorizedTransitions,
   VectorizeTransitionsCallback,
 } from '../@types';
-import {EPSILON, LOG_STD_MAX, LOG_STD_MIN, VERSION} from '../constants';
+import {VERSION} from '../constants';
+
+const LOG_STD_MIN = -20;
+const LOG_STD_MAX = 2;
+const EPSILON = 1e-8;
 
 export const assertNumericArray = (e: unknown): number[] => {
   assert(Array.isArray(e));
@@ -59,11 +63,9 @@ const getModelKey = (modelName: string) => {
   return `indexeddb://${modelName}-${VERSION}`;
 };
 
-export const saveModel = (
-  model: tf.LayersModel
-) => model.save(getModelKey(model.name));
+const saveModel = (model: tf.LayersModel) => model.save(getModelKey(model.name));
 
-export const loadModelByName = async (
+const loadModelByName = async (
   modelName: string
 ): Promise<tf.LayersModel | null> => {
   const key = getModelKey(modelName);
